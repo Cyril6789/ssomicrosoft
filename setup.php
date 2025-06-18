@@ -19,7 +19,7 @@ function plugin_init_syncaad() {
     global $PLUGIN_HOOKS;
     $PLUGIN_HOOKS['csrf_compliant']['syncaad'] = true;
 
-    $PLUGIN_HOOKS['menu_entry']['syncaad'] = true;
+        'plugin_syncaad' => __('Gérer les connexions AAD', 'syncaad')
     $PLUGIN_HOOKS['config_page']['syncaad'] = 'front/connection.php';
     $PLUGIN_HOOKS['rights']['syncaad'] = 'plugin_syncaad_getRights';
 }

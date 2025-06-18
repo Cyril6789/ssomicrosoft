@@ -2,7 +2,7 @@
 include '../../../inc/includes.php';
 require_once GLPI_ROOT . '/plugins/syncaad/inc/sync.class.php';
 
-Session::checkRight('syncaad', UPDATE);
+Session::checkRight('plugin_syncaad', UPDATE);
 Html::header(__('Synchronisation', 'syncaad'), '', 'plugins', 'syncaad');
 
 $connection_id = $_GET['connection_id'] ?? 0;
