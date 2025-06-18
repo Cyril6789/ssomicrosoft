@@ -9,7 +9,7 @@ function plugin_version_syncaad() {
         'requirements'   => [
             'glpi' => [
                 'min' => '10.0',
-                'max' => '',
+                'max' => '11.0',
             ]
         ]
     ];
