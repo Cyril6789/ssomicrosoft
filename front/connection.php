@@ -3,7 +3,7 @@ include '../../../inc/includes.php';
 
 Html::header(__('Connexions Entra ID', 'syncaad'), '', 'plugins', 'syncaad', 'connection');
 
-Session::checkRight('syncaad', READ);
+Session::checkRight('plugin_syncaad', READ);
 
 Search::show('PluginSyncaadConnection');
 
