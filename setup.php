@@ -31,7 +31,8 @@ function plugin_syncaad_getRights() {
 
 }
 
-function plugin_install_syncaad() {
+function plugin_syncaad_install() {
+
     global $DB;
     $query = "CREATE TABLE IF NOT EXISTS `glpi_plugin_syncaad_connections` ("
             . "`id` int(11) NOT NULL AUTO_INCREMENT,"
@@ -50,7 +51,9 @@ function plugin_install_syncaad() {
     return true;
 }
 
-function plugin_uninstall_syncaad() {
+
+function plugin_syncaad_uninstall() {
+
     global $DB;
     $DB->queryOrDie("DROP TABLE IF EXISTS `glpi_plugin_syncaad_connections`", "Drop table");
     return true;

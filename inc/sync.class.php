@@ -15,7 +15,6 @@ class PluginSyncaadSync {
       }
    }
 
-
    public static function syncConnection(array $conn) {
 
       $users = self::fetchUsersFromEntra($conn);
