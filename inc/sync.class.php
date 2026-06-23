@@ -21,6 +21,27 @@ class PluginSsomicrosoftSync {
       return $total;
    }
 
+   /**
+    * Synchronise every active connection and return a per-connection summary,
+    * so callers (e.g. the manual button) can report counts on screen.
+    *
+    * @return array<int, array{name:string, fetched:int, scoped:int}>
+    */
+   public static function syncAllSummaries(): array {
+      global $DB;
+
+      $summaries = [];
+      foreach ($DB->request(['FROM' => 'glpi_plugin_ssomicrosoft_connections', 'WHERE' => ['active' => 1]]) as $conn) {
+         $result      = self::runConnection($conn);
+         $summaries[] = [
+            'name'    => (string) ($conn['name'] ?? '?'),
+            'fetched' => $result['fetched'],
+            'scoped'  => $result['scoped'],
+         ];
+      }
+      return $summaries;
+   }
+
    /** Synchronise a single connection (full pull). Returns the number of users processed. */
    public static function syncConnection(array $conn): int {
       return self::runConnection($conn)['scoped'];
