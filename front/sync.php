@@ -22,6 +22,16 @@ $report = function (string $name, array $result): void {
 
     if ((int) $result['fetched'] === 0) {
         Session::addMessageAfterRedirect($message, false, ERROR);
+
+        // Show the exact error returned by Microsoft, when we have it.
+        if (!empty($result['error'])) {
+            Session::addMessageAfterRedirect(
+                sprintf(__('Erreur renvoyée par Microsoft : %s', 'ssomicrosoft'), $result['error']),
+                false,
+                ERROR
+            );
+        }
+
         Session::addMessageAfterRedirect(
             __('Aucun compte reçu de Microsoft : vérifiez la permission Application « User.Read.All » (avec consentement administrateur), ainsi que le tenant / client / secret de la connexion.', 'ssomicrosoft'),
             false,

@@ -63,6 +63,9 @@ msgstr "Entité par défaut (nouveaux comptes)"
 msgid "Erreur renvoyée par Entra ID : %s"
 msgstr "Erreur renvoyée par Entra ID : %s"
 
+msgid "Erreur renvoyée par Microsoft : %s"
+msgstr "Erreur renvoyée par Microsoft : %s"
+
 msgid "Ex. : @contoso.com — seuls les comptes dont l'email se termine ainsi sont traités. Plusieurs domaines possibles, séparés par une virgule ou un point-virgule (ex. : @contoso.com, @fabrikam.com)."
 msgstr "Ex. : @contoso.com — seuls les comptes dont l'email se termine ainsi sont traités. Plusieurs domaines possibles, séparés par une virgule ou un point-virgule (ex. : @contoso.com, @fabrikam.com)."
 
