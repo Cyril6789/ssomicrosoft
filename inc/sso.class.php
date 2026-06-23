@@ -14,6 +14,15 @@ class PluginSyncaadSso {
    private const SESSION_STATE = 'plugin_syncaad_sso_state';
    private const SESSION_CONN  = 'plugin_syncaad_sso_conn';
 
+   // Name of the short-lived cookie used as a fallback for the OAuth state.
+   // The PHP session is not always preserved across the cross-site redirect
+   // back from Microsoft (e.g. a SameSite=Strict session cookie is withheld on
+   // the first top-level navigation coming from login.microsoftonline.com),
+   // which made the first SSO attempt fail with an "invalid state" error while
+   // the second one succeeded. This cookie carries the same information with an
+   // explicit SameSite=Lax policy so it always survives the round-trip.
+   private const COOKIE_STATE  = 'syncaad_sso_state';
+
    /** Compute the redirect URI declared in Entra ID for a connection. */
    public static function getRedirectUri(array $conn): string {
       global $CFG_GLPI;
@@ -34,6 +43,10 @@ class PluginSyncaadSso {
       $state = bin2hex(random_bytes(16));
       $_SESSION[self::SESSION_STATE] = $state;
       $_SESSION[self::SESSION_CONN]  = $connection_id;
+
+      // Fallback copy in a dedicated cookie, in case the PHP session is not
+      // carried over when Microsoft redirects the browser back to us.
+      self::setStateCookie($connection_id . ':' . $state);
 
       $params = [
          'client_id'     => $conn['client_id'],
@@ -69,6 +82,21 @@ class PluginSyncaadSso {
       $expected_state = (string) ($_SESSION[self::SESSION_STATE] ?? '');
       $connection_id  = (int) ($_SESSION[self::SESSION_CONN] ?? 0);
       unset($_SESSION[self::SESSION_STATE], $_SESSION[self::SESSION_CONN]);
+
+      // When the session did not survive the redirect, recover the expected
+      // state and connection id from the fallback cookie.
+      if ($expected_state === '' && isset($_COOKIE[self::COOKIE_STATE])) {
+         [$cookie_conn, $cookie_state] = array_pad(
+            explode(':', (string) $_COOKIE[self::COOKIE_STATE], 2),
+            2,
+            ''
+         );
+         $expected_state = (string) $cookie_state;
+         if ($connection_id === 0) {
+            $connection_id = (int) $cookie_conn;
+         }
+      }
+      self::clearStateCookie();
 
       if ($code === '' || $state === '' || $expected_state === '' || !hash_equals($expected_state, $state)) {
          self::fail(__('Requête SSO invalide (state).', 'syncaad'));
@@ -211,6 +239,48 @@ class PluginSyncaadSso {
          . __('Retour', 'syncaad') . '</a></div>';
       Html::nullFooter();
       exit;
+   }
+
+   /** Path the SSO fallback cookie is scoped to. */
+   private static function cookiePath(): string {
+      global $CFG_GLPI;
+
+      $root = rtrim((string) ($CFG_GLPI['root_doc'] ?? ''), '/');
+      return $root . '/plugins/syncaad/front/';
+   }
+
+   /** Store the OAuth state in a short-lived, SameSite=Lax cookie. */
+   private static function setStateCookie(string $value): void {
+      global $CFG_GLPI;
+
+      if (headers_sent()) {
+         return;
+      }
+
+      $secure = str_starts_with((string) ($CFG_GLPI['url_base'] ?? ''), 'https');
+      setcookie(self::COOKIE_STATE, $value, [
+         'expires'  => time() + 600,
+         'path'     => self::cookiePath(),
+         'secure'   => $secure,
+         'httponly' => true,
+         'samesite' => 'Lax',
+      ]);
+   }
+
+   /** Remove the SSO fallback cookie. */
+   private static function clearStateCookie(): void {
+      unset($_COOKIE[self::COOKIE_STATE]);
+
+      if (headers_sent()) {
+         return;
+      }
+
+      setcookie(self::COOKIE_STATE, '', [
+         'expires'  => time() - 3600,
+         'path'     => self::cookiePath(),
+         'httponly' => true,
+         'samesite' => 'Lax',
+      ]);
    }
 
    /** Perform an HTTP POST (form-encoded) request, returning the body or null. */
