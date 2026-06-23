@@ -43,7 +43,7 @@ Dans le portail Entra ID (Azure) → **App registrations** → **New registratio
 Dans **Configuration > Synchro AAD**, créez une connexion :
 
 - **Tenant ID**, **Client ID**, **Client Secret**.
-- **Filtre de domaine** : ex. `@contoso.com`. Seuls les comptes dont l'e-mail/UPN se termine ainsi sont traités/autorisés.
+- **Filtre de domaine** : ex. `@contoso.com`. Seuls les comptes dont l'e-mail/UPN se termine ainsi sont traités/autorisés. Pour autoriser plusieurs domaines, séparez-les par une **virgule** ou un **point-virgule** : `@contoso.com, @fabrikam.com`.
 - **Synchronisation** : désactivation et/ou suppression automatique des comptes absents.
 - **Authentification SSO** :
   - *SSO activé* : affiche le bouton de connexion sur la page de login.

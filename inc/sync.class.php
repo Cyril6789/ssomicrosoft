@@ -72,10 +72,14 @@ class PluginSyncaadSync {
       $select = 'id,displayName,mail,userPrincipalName,givenName,surname,accountEnabled';
       $url    = 'https://graph.microsoft.com/v1.0/users?$select=' . $select . '&$top=999';
 
-      if (!empty($conn['email_filter'])) {
-         $filter = rawurlencode("endsWith(mail,'" . str_replace("'", "''", $conn['email_filter']) . "')");
+      $domains = PluginSyncaadConnection::parseEmailFilters($conn['email_filter'] ?? '');
+      if (!empty($domains)) {
+         $clauses = [];
+         foreach ($domains as $domain) {
+            $clauses[] = "endsWith(mail,'" . str_replace("'", "''", $domain) . "')";
+         }
          // Advanced query (endsWith) requires ConsistencyLevel + $count.
-         $url   .= '&$count=true&$filter=' . $filter;
+         $url .= '&$count=true&$filter=' . rawurlencode(implode(' or ', $clauses));
       }
 
       $users = [];
@@ -169,8 +173,13 @@ class PluginSyncaadSync {
       }
 
       $where = ['glpi_users.is_deleted' => 0];
-      if (!empty($conn['email_filter'])) {
-         $where[] = ['glpi_useremails.email' => ['LIKE', '%' . $conn['email_filter']]];
+      $domains = PluginSyncaadConnection::parseEmailFilters($conn['email_filter'] ?? '');
+      if (!empty($domains)) {
+         $or = [];
+         foreach ($domains as $domain) {
+            $or[] = ['glpi_useremails.email' => ['LIKE', '%' . $domain]];
+         }
+         $where[] = ['OR' => $or];
       }
 
       $iterator = $DB->request([

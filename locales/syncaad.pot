@@ -36,6 +36,12 @@ msgstr ""
 msgid "Connexion SSO introuvable ou désactivée."
 msgstr ""
 
+msgid "Connexion classique"
+msgstr ""
+
+msgid "Continuer"
+msgstr ""
+
 msgid "Créer les comptes manquants"
 msgstr ""
 
@@ -48,7 +54,7 @@ msgstr ""
 msgid "Erreur renvoyée par Entra ID : %s"
 msgstr ""
 
-msgid "Ex. : @contoso.com — seuls les comptes dont l'email se termine ainsi sont traités."
+msgid "Ex. : @contoso.com — seuls les comptes dont l'email se termine ainsi sont traités. Plusieurs domaines possibles, séparés par une virgule ou un point-virgule (ex. : @contoso.com, @fabrikam.com)."
 msgstr ""
 
 msgid "Filtre de domaine"

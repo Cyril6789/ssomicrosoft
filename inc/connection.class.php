@@ -21,6 +21,27 @@ class PluginSyncaadConnection extends CommonDBTM {
       return 'ti ti-cloud-lock';
    }
 
+   /**
+    * Split a domain filter into a normalised list of domains.
+    *
+    * Several domains may be listed, separated by a comma or a semicolon
+    * (whitespace and line breaks are tolerated too), e.g.
+    * "@contoso.com, @fabrikam.com". Returns lowercase, de-duplicated entries.
+    *
+    * @param string|null $filter
+    * @return string[]
+    */
+   public static function parseEmailFilters($filter): array {
+      $filter = trim((string) $filter);
+      if ($filter === '') {
+         return [];
+      }
+
+      $parts = preg_split('/[\s,;]+/', strtolower($filter), -1, PREG_SPLIT_NO_EMPTY);
+
+      return array_values(array_unique($parts));
+   }
+
    function defineTabs($options = []) {
       $ong = [];
       $this->addDefaultFormTab($ong);
@@ -118,7 +139,7 @@ class PluginSyncaadConnection extends CommonDBTM {
       echo '<td>' . __('Filtre de domaine', 'syncaad') . '</td>';
       echo '<td colspan="3">';
       echo Html::input('email_filter', ['value' => $this->fields['email_filter'], 'size' => 40]);
-      echo '<br><span class="text-muted">' . __("Ex. : @contoso.com — seuls les comptes dont l'email se termine ainsi sont traités.", 'syncaad') . '</span>';
+      echo '<br><span class="text-muted">' . __("Ex. : @contoso.com — seuls les comptes dont l'email se termine ainsi sont traités. Plusieurs domaines possibles, séparés par une virgule ou un point-virgule (ex. : @contoso.com, @fabrikam.com).", 'syncaad') . '</span>';
       echo '</td>';
       echo '</tr>';
 
