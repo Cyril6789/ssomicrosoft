@@ -10,6 +10,15 @@ msgstr ""
 msgid "A PHP version providing random_bytes() is required by SSO Microsoft."
 msgstr "Une version de PHP fournissant random_bytes() est requise par SSO Microsoft."
 
+msgid "Aucun compte reçu de Microsoft : vérifiez la permission Application « User.Read.All » (avec consentement administrateur), ainsi que le tenant / client / secret de la connexion."
+msgstr "Aucun compte reçu de Microsoft : vérifiez la permission Application « User.Read.All » (avec consentement administrateur), ainsi que le tenant / client / secret de la connexion."
+
+msgid "Aucune connexion active à synchroniser."
+msgstr "Aucune connexion active à synchroniser."
+
+msgid "Connexion « %1$s » : %2$d compte(s) reçu(s) de Microsoft, %3$d traité(s) après filtre de domaine."
+msgstr "Connexion « %1$s » : %2$d compte(s) reçu(s) de Microsoft, %3$d traité(s) après filtre de domaine."
+
 msgid "Authentification SSO"
 msgstr "Authentification SSO"
 
