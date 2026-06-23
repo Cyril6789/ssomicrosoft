@@ -124,6 +124,63 @@ function plugin_syncaad_display_login() {
            . '</a>';
     }
     echo '</div>';
+
+    // When SSO is available it becomes the primary way to sign in: promote the
+    // SSO buttons above the standard form and fold the latter into a collapsed
+    // accordion ("secondary" login). Done client-side because the standard form
+    // is rendered by GLPI itself, in a position we cannot control from the hook.
+    $accordion_label = json_encode(__('Connexion classique', 'syncaad'), JSON_UNESCAPED_UNICODE);
+    echo <<<JS
+<script type="text/javascript">
+(function() {
+   function init() {
+      var sso = document.querySelector('.plugin-syncaad-sso');
+      if (!sso) { return; }
+
+      var field = document.querySelector('input[name="login_name"], input[name="login"], input[name="fielda"]');
+      var form  = field ? field.closest('form') : null;
+      if (!form || form.dataset.syncaadDone) { return; }
+      form.dataset.syncaadDone = '1';
+
+      var acc = document.createElement('div');
+      acc.className = 'accordion plugin-syncaad-classic mt-2 mb-2';
+      acc.innerHTML =
+         '<div class="accordion-item">' +
+            '<h2 class="accordion-header">' +
+               '<button class="accordion-button collapsed" type="button" aria-expanded="false">' +
+                  {$accordion_label} +
+               '</button>' +
+            '</h2>' +
+            '<div class="accordion-collapse collapse">' +
+               '<div class="accordion-body"></div>' +
+            '</div>' +
+         '</div>';
+
+      // Re-order: SSO buttons, then the collapsed classic form.
+      var parent = form.parentNode;
+      parent.insertBefore(sso, form);
+      parent.insertBefore(acc, form);
+      acc.querySelector('.accordion-body').appendChild(form);
+
+      // Self-managed toggle so it works with Bootstrap's CSS alone (no JS dep).
+      var btn  = acc.querySelector('.accordion-button');
+      var body = acc.querySelector('.accordion-collapse');
+      btn.addEventListener('click', function(e) {
+         e.preventDefault();
+         var shown = body.classList.toggle('show');
+         btn.classList.toggle('collapsed', !shown);
+         btn.setAttribute('aria-expanded', shown ? 'true' : 'false');
+      });
+   }
+
+   if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+   } else {
+      init();
+   }
+})();
+</script>
+JS;
 }
 
 /**

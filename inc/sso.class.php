@@ -136,7 +136,33 @@ class PluginSyncaadSso {
          self::fail(__('La connexion à GLPI a échoué (aucune habilitation valide ?).', 'syncaad'));
       }
 
-      Html::redirect($CFG_GLPI['root_doc'] . '/');
+      self::redirectHome();
+   }
+
+   /**
+    * Send the freshly authenticated user to the GLPI home page.
+    *
+    * We deliberately use a client-side redirect instead of an HTTP redirect.
+    * The just-issued GLPI session cookie may carry a SameSite policy that the
+    * browser would withhold on a server redirect chained from the cross-site
+    * Microsoft callback, which left the user back on the login page on the
+    * first attempt (a second attempt then "just worked"). Rendering an HTML
+    * page first turns the subsequent navigation into a fresh same-site request,
+    * so the authenticated session cookie is always sent.
+    */
+   private static function redirectHome(): void {
+      global $CFG_GLPI;
+
+      $url = $CFG_GLPI['root_doc'] . '/';
+
+      Html::nullHeader(__('Synchro AAD', 'syncaad'));
+      echo '<meta http-equiv="refresh" content="0;url=' . htmlspecialchars($url) . '">';
+      echo '<script type="text/javascript">window.location.replace(' . json_encode($url) . ');</script>';
+      echo '<div class="center">'
+         . '<a href="' . htmlspecialchars($url) . '">' . __('Continuer', 'syncaad') . '</a>'
+         . '</div>';
+      Html::nullFooter();
+      exit;
    }
 
    /** Exchange the authorization code for tokens. */
@@ -201,16 +227,29 @@ class PluginSyncaadSso {
       return (bool) Session::getLoginUserID();
    }
 
-   /** Check that a value ends with the connection's domain filter. */
+   /**
+    * Check that a value ends with one of the connection's domain filters.
+    *
+    * The filter may list several domains separated by a comma or a semicolon
+    * (e.g. "@contoso.com, @fabrikam.com"); the value matches if it ends with
+    * any of them. An empty filter accepts everything.
+    */
    private static function matchesDomain(array $conn, string $value): bool {
-      $filter = trim((string) ($conn['email_filter'] ?? ''));
-      if ($filter === '') {
+      $filters = PluginSyncaadConnection::parseEmailFilters($conn['email_filter'] ?? '');
+      if (empty($filters)) {
          return true;
       }
       if ($value === '') {
          return false;
       }
-      return str_ends_with(strtolower($value), strtolower($filter));
+
+      $value = strtolower($value);
+      foreach ($filters as $domain) {
+         if (str_ends_with($value, $domain)) {
+            return true;
+         }
+      }
+      return false;
    }
 
    /** Load an Entra ID connection, optionally requiring SSO to be enabled. */
