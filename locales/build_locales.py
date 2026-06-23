@@ -41,6 +41,8 @@ ENTRIES = [
      "Entité par défaut (nouveaux comptes)", "Default entity (new accounts)"),
     ('Erreur renvoyée par Entra ID : %s', None,
      "Erreur renvoyée par Entra ID : %s", "Error returned by Entra ID: %s"),
+    ('Erreur renvoyée par Microsoft : %s', None,
+     "Erreur renvoyée par Microsoft : %s", "Error returned by Microsoft: %s"),
     ("Ex. : @contoso.com — seuls les comptes dont l'email se termine ainsi sont traités. Plusieurs domaines possibles, séparés par une virgule ou un point-virgule (ex. : @contoso.com, @fabrikam.com).", None,
      "Ex. : @contoso.com — seuls les comptes dont l'email se termine ainsi sont traités. Plusieurs domaines possibles, séparés par une virgule ou un point-virgule (ex. : @contoso.com, @fabrikam.com).",
      "E.g. @contoso.com — only accounts whose e-mail ends this way are processed. Several domains are allowed, separated by a comma or a semicolon (e.g. @contoso.com, @fabrikam.com)."),

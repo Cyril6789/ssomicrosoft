@@ -10,6 +10,9 @@ if (!defined('GLPI_ROOT')) {
  */
 class PluginSsomicrosoftSync {
 
+   /** Last error detail (HTTP status + body / token error) for the current run. */
+   private static $lastError = '';
+
    /** Synchronise every active connection. Returns the number of users processed. */
    public static function syncAll(): int {
       global $DB;
@@ -25,7 +28,7 @@ class PluginSsomicrosoftSync {
     * Synchronise every active connection and return a per-connection summary,
     * so callers (e.g. the manual button) can report counts on screen.
     *
-    * @return array<int, array{name:string, fetched:int, scoped:int}>
+    * @return array<int, array{name:string, fetched:int, scoped:int, error:string}>
     */
    public static function syncAllSummaries(): array {
       global $DB;
@@ -37,6 +40,7 @@ class PluginSsomicrosoftSync {
             'name'    => (string) ($conn['name'] ?? '?'),
             'fetched' => $result['fetched'],
             'scoped'  => $result['scoped'],
+            'error'   => $result['error'] ?? '',
          ];
       }
       return $summaries;
@@ -50,10 +54,13 @@ class PluginSsomicrosoftSync {
    /**
     * Synchronise a single connection and return diagnostic counts.
     *
-    * @return array{fetched:int, scoped:int} fetched = users received from Entra,
-    *         scoped = users kept after the domain filter (and processed).
+    * @return array{fetched:int, scoped:int, error:string} fetched = users
+    *         received from Entra, scoped = users kept after the domain filter
+    *         (and processed), error = last Microsoft error detail (if any).
     */
    public static function runConnection(array $conn): array {
+      self::$lastError = '';
+
       $users   = self::fetchUsersFromEntra($conn);
       $domains = PluginSsomicrosoftConnection::parseEmailFilters($conn['email_filter'] ?? '');
       $scoped  = self::filterByDomain($users, $domains);
@@ -78,7 +85,11 @@ class PluginSsomicrosoftSync {
          implode(', ', $domains) ?: 'aucun filtre'
       ));
 
-      return ['fetched' => count($users), 'scoped' => count($scoped)];
+      return [
+         'fetched' => count($users),
+         'scoped'  => count($scoped),
+         'error'   => self::$lastError,
+      ];
    }
 
    /**
@@ -175,10 +186,11 @@ class PluginSsomicrosoftSync {
          $task->addVolume($result['scoped']);
 
          $task->log(sprintf(
-            'Connexion "%s" : %d reçus d\'Entra, %d après filtre.',
+            'Connexion "%s" : %d reçus d\'Entra, %d après filtre.%s',
             (string) ($conn['name'] ?? '?'),
             $result['fetched'],
-            $result['scoped']
+            $result['scoped'],
+            !empty($result['error']) ? ' Erreur Microsoft : ' . $result['error'] : ''
          ));
       }
 
@@ -398,6 +410,32 @@ class PluginSsomicrosoftSync {
       Toolbox::logInFile('ssomicrosoft', $message . "\n");
    }
 
+   /** Remember (and log) a readable error so it can be shown on screen. */
+   private static function recordError(string $context, int $status, string $body): void {
+      $detail = self::extractApiError($body);
+      self::$lastError = $context . ' (HTTP ' . $status . ')'
+                       . ($detail !== '' ? ' : ' . $detail : '');
+      self::log($context . " HTTP {$status} — " . substr($body, 0, 800));
+   }
+
+   /** Extract the human-readable message from an Azure AD or Graph JSON error. */
+   private static function extractApiError(string $body): string {
+      $data = json_decode($body, true);
+      if (is_array($data)) {
+         if (!empty($data['error_description'])) {            // Azure AD token error
+            return (string) $data['error_description'];
+         }
+         if (!empty($data['error']['message'])) {            // Microsoft Graph error
+            $code = $data['error']['code'] ?? '';
+            return trim(($code !== '' ? $code . ': ' : '') . $data['error']['message']);
+         }
+         if (!empty($data['error']) && is_string($data['error'])) {
+            return (string) $data['error'];
+         }
+      }
+      return substr($body, 0, 300);
+   }
+
    /** Perform an HTTP GET request, returning the body or null on failure. */
    private static function httpGet(string $url, array $headers = []): ?string {
       $ch = curl_init($url);
@@ -410,11 +448,12 @@ class PluginSsomicrosoftSync {
       curl_close($ch);
 
       if ($response === false) {
+         self::$lastError = 'Microsoft Graph : ' . $error;
          self::log("GET cURL error: {$error} — {$url}");
          return null;
       }
       if ($status < 200 || $status >= 300) {
-         self::log("GET HTTP {$status} — {$url} — " . substr((string) $response, 0, 800));
+         self::recordError('Microsoft Graph', $status, (string) $response);
          return null;
       }
       return (string) $response;
@@ -433,11 +472,12 @@ class PluginSsomicrosoftSync {
       curl_close($ch);
 
       if ($response === false) {
+         self::$lastError = 'Jeton Microsoft : ' . $error;
          self::log("POST cURL error: {$error} — {$url}");
          return null;
       }
       if ($status < 200 || $status >= 300) {
-         self::log("POST HTTP {$status} — {$url} — " . substr((string) $response, 0, 800));
+         self::recordError('Jeton Microsoft', $status, (string) $response);
          return null;
       }
       return (string) $response;
