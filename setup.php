@@ -1,6 +1,6 @@
 <?php
 
-define('PLUGIN_SSOMICROSOFT_VERSION', '2.1.0');
+define('PLUGIN_SSOMICROSOFT_VERSION', '2.2.0');
 
 // Minimal/maximal GLPI version, inclusive/exclusive
 define('PLUGIN_SSOMICROSOFT_MIN_GLPI', '11.0.0');

@@ -122,7 +122,7 @@ class PluginSsomicrosoftConnection extends CommonDBTM {
 
       echo '<tr class="tab_bg_1"><td colspan="4"><span class="text-muted">'
          . '<i class="ti ti-info-circle me-1"></i>'
-         . __("Application Entra ID (App registration) : renseignez le Tenant ID, le Client ID et la « Value » du Client Secret. La synchronisation utilise le flux « client credentials » : dans l'application, ajoutez la permission de type Application « Microsoft Graph → User.Read.All » puis cliquez sur « Accorder un consentement administrateur ». ⚠️ Une permission Déléguée ne suffit PAS pour la synchronisation.", 'ssomicrosoft')
+         . __("Application Entra ID (App registration) : renseignez le Tenant ID, le Client ID et la « Value » du Client Secret. La synchronisation utilise le flux « client credentials » : dans l'application, ajoutez la permission de type Application « Microsoft Graph → User.Read.All » puis cliquez sur « Accorder un consentement administrateur ». ⚠️ Une permission Déléguée ne suffit PAS pour la synchronisation. Pour importer aussi l'appartenance aux groupes (attribution automatique des groupes GLPI / habilitations, comme en LDAP), ajoutez en plus la permission Application « GroupMember.Read.All ».", 'ssomicrosoft')
          . '</span></td></tr>';
 
       echo '<tr class="tab_bg_1">';
@@ -170,7 +170,7 @@ class PluginSsomicrosoftConnection extends CommonDBTM {
 
       echo '<tr class="tab_bg_1"><td colspan="4"><span class="text-muted">'
          . '<i class="ti ti-info-circle me-1"></i>'
-         . __("Le SSO utilise le flux délégué (OpenID Connect). Dans l'application Entra ID, ajoutez les permissions Déléguées « openid », « profile », « email » et « User.Read », et déclarez l'URL de redirection (ci-dessous) comme « Redirect URI » de type Web.", 'ssomicrosoft')
+         . __("Le SSO utilise le flux délégué (OpenID Connect). Dans l'application Entra ID, ajoutez les permissions Déléguées « openid », « profile », « email » et « User.Read », et déclarez l'URL de redirection (ci-dessous) comme « Redirect URI » de type Web. Pour l'attribution automatique des groupes GLPI / habilitations à la connexion (comme en LDAP), ajoutez en plus la permission Déléguée « GroupMember.Read.All ».", 'ssomicrosoft')
          . '</span></td></tr>';
 
       echo '<tr class="tab_bg_1">';

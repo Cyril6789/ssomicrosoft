@@ -65,8 +65,21 @@ class PluginSsomicrosoftSync {
       $domains = PluginSsomicrosoftConnection::parseEmailFilters($conn['email_filter'] ?? '');
       $scoped  = self::filterByDomain($users, $domains);
 
+      // Only resolve group memberships when at least one GLPI group is mapped:
+      // avoids one extra Graph call per user (and the GroupMember.Read.All
+      // permission) when the feature is not used.
+      $apply_groups = PluginSsomicrosoftGroup::hasMappings();
+      $group_token  = $apply_groups ? self::getAccessToken($conn) : false;
+
       foreach ($scoped as $user) {
-         PluginSsomicrosoftUser::upsert($user, $conn, true);
+         $glpi_user = PluginSsomicrosoftUser::upsert($user, $conn, true);
+
+         if ($glpi_user !== null && $apply_groups && $group_token && !empty($user['id'])) {
+            PluginSsomicrosoftGroup::apply(
+               $glpi_user->getID(),
+               self::fetchUserGroups($group_token, (string) $user['id'])
+            );
+         }
       }
 
       if (!empty($conn['delete_missing']) || !empty($conn['disable_if_disabled'])) {
@@ -279,6 +292,44 @@ class PluginSsomicrosoftSync {
       }
 
       return $users;
+   }
+
+   /**
+    * Fetch a single Entra user's group memberships (application flow).
+    *
+    * Uses transitiveMemberOf so nested groups are resolved, restricted to
+    * groups. Requires the application permission GroupMember.Read.All. Returns
+    * an empty list on any error (non-fatal: the user simply gets no group).
+    *
+    * @return array<int, array> Graph group objects.
+    */
+   private static function fetchUserGroups(string $token, string $entra_user_id): array {
+      $select = 'id,displayName,onPremisesDistinguishedName,onPremisesSamAccountName';
+      $url    = 'https://graph.microsoft.com/v1.0/users/' . rawurlencode($entra_user_id)
+              . '/transitiveMemberOf/microsoft.graph.group?$select=' . $select . '&$top=999';
+
+      $groups = [];
+      $guard  = 0;
+      while ($url && $guard < 1000) {
+         $guard++;
+         $response = self::httpGet($url, [
+            'Authorization: Bearer ' . $token,
+            'Content-Type: application/json',
+         ]);
+         if ($response === null) {
+            break;
+         }
+         $data = json_decode($response, true);
+         if (!is_array($data)) {
+            break;
+         }
+         foreach (($data['value'] ?? []) as $group) {
+            $groups[] = $group;
+         }
+         $url = $data['@odata.nextLink'] ?? null;
+      }
+
+      return $groups;
    }
 
    /** Fetch a single Entra ID user by e-mail. */

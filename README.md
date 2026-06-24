@@ -22,6 +22,13 @@ Compatible **GLPI 11.x** (testé sur la branche 11.0).
 - **Page de login remaniée** : quand au moins une connexion SSO est active, les boutons SSO
   deviennent l'accès principal et le formulaire GLPI classique est replié sous un discret
   « Connexion GLPI ».
+- **Import des groupes & habilitations** (comme en LDAP) : l'appartenance aux groupes Entra ID
+  (`memberOf`) est rapprochée des groupes GLPI configurés et alimente les *Règles d'affectation
+  d'habilitations* — attribution automatique des groupes, profils et entités à la connexion SSO
+  comme à la synchronisation. Voir [Groupes & habilitations](#groupes--habilitations).
+- **Persistance de la session SSO** : la connexion est conservée après fermeture du navigateur
+  (cookie « se souvenir de moi » de GLPI), tant que *Configuration → Authentification → Durée du
+  cookie de session* est > 0.
 - **Gestion fine des droits** : le droit `plugin_ssomicrosoft` est visible et modifiable par
   profil (Administration → Profils → onglet « SSO Microsoft »).
 - **Diagnostic intégré** : la synchronisation manuelle affiche à l'écran le nombre de comptes
@@ -60,6 +67,7 @@ Portail Entra ID (Azure) → **App registrations** → **New registration**.
    |-------|--------------------|-------------|
    | **SSO** (flux délégué) | **Déléguée** | `openid`, `profile`, `email`, `User.Read` |
    | **Synchronisation** (client credentials) | **Application** | `User.Read.All` **+ « Grant admin consent »** |
+   | **Groupes / habilitations** (optionnel, voir plus bas) | **Déléguée** (SSO) **et/ou** **Application** (synchro) | `GroupMember.Read.All` **+ « Grant admin consent »** |
 
    > ⚠️ **Point crucial** : la synchronisation s'exécute **sans utilisateur connecté**
    > (flux *client credentials*) et n'utilise **que les permissions de type Application**.
@@ -119,7 +127,40 @@ apparaît sur la page de login GLPI. Le flux :
 2. Retour sur `front/sso.php`, échange du code contre un jeton, lecture du profil via
    Microsoft Graph (`/me`).
 3. Vérification du domaine autorisé, puis rapprochement / création du compte GLPI.
-4. Ouverture de la session GLPI (les habilitations GLPI standard s'appliquent).
+4. Import des groupes / habilitations si configuré (voir ci‑dessous), puis ouverture de la
+   session GLPI. La session est rendue **persistante** (cookie « se souvenir de moi » de GLPI)
+   pour survivre à la fermeture du navigateur, à condition que la *Durée du cookie de session*
+   soit > 0 dans **Configuration → Authentification**.
+
+## Groupes & habilitations
+
+Le plugin reproduit le comportement de l'**authentification LDAP/AD intégrée** de GLPI :
+l'appartenance aux groupes de l'utilisateur dans Entra ID (`memberOf`, résolu de façon
+**transitive** — groupes imbriqués inclus) sert à :
+
+1. **rattacher l'utilisateur aux groupes GLPI** correspondants (liens *dynamiques*), via
+   l'onglet **« Liaison annuaire LDAP »** de chaque groupe GLPI :
+   - **DN du groupe** (`ldap_group_dn`) : doit correspondre à l'identifiant du groupe Entra —
+     son `onPremisesDistinguishedName` pour les groupes synchronisés depuis l'AD, ou (à défaut
+     de DN, pour un groupe *cloud‑only*) son **nom d'affichage** ou son **object ID** ;
+   - **Attribut … appartenance aux groupes** + **valeur** (`ldap_field` + `ldap_value`) : la
+     valeur (motif *LIKE*, `*`/`%` acceptés) est comparée aux identifiants des groupes Entra.
+2. **alimenter les « Règles d'affectation d'habilitations à un utilisateur »** (moteur
+   `RuleRight`) avec les groupes GLPI ainsi obtenus : attribution automatique des **profils** et
+   **entités** selon les groupes, exactement comme en LDAP.
+
+> **Opt‑in & sans création de groupe.** Aucun groupe GLPI n'est créé : seuls les groupes
+> portant déjà une *Liaison annuaire LDAP* sont rapprochés. Tant qu'aucun groupe n'en porte,
+> la fonctionnalité est **inactive** et aucun appel Graph de groupes n'est effectué (la
+> permission `GroupMember.Read.All` n'est alors pas nécessaire).
+
+Les rattachements et habilitations posés par ce mécanisme sont **dynamiques** : ils sont
+recalculés à chaque connexion SSO / synchronisation (un groupe ou un droit retiré côté Entra
+est retiré côté GLPI), comme pour LDAP.
+
+**Permission Entra ID requise** : `GroupMember.Read.All`, en **Déléguée** pour l'attribution à
+la connexion SSO et/ou en **Application** pour l'attribution à la synchronisation, avec
+**consentement administrateur**.
 
 ## Droits & profils
 
