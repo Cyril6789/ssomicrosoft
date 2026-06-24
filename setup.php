@@ -279,63 +279,94 @@ function plugin_ssomicrosoft_install() {
 
     $migration->executeMigration();
 
-    // Preserve granted permissions when upgrading from the former plugin key:
-    // rename the old right rows instead of recreating them empty.
-    $DB->update(
-        'glpi_profilerights',
-        ['name' => 'plugin_ssomicrosoft'],
-        ['name' => 'plugin_syncaad']
-    );
+    // Post-schema steps (rights and automatic action). These are best-effort:
+    // the table created above is what really matters for the plugin to work, so
+    // a failure here (e.g. a leftover duplicate right row from an older
+    // migration) must NOT abort the whole update. GLPI 11 turns SQL errors into
+    // exceptions, and an exception escaping this install function leaves the
+    // plugin stuck in the "to update" state (Plugin::install never reaches its
+    // success branch). We therefore isolate these steps and log any problem to
+    // files/_log/ssomicrosoft.log instead of letting it break the upgrade.
+    try {
+        // Preserve granted permissions when upgrading from the former plugin key:
+        // rename the old right rows to the new key. Drop any legacy row that
+        // would collide with an already-migrated one first, so the rename can
+        // never hit the (profiles_id, name) unique constraint.
+        $already_migrated = [];
+        foreach ($DB->request([
+            'SELECT' => 'profiles_id',
+            'FROM'   => 'glpi_profilerights',
+            'WHERE'  => ['name' => 'plugin_ssomicrosoft'],
+        ]) as $row) {
+            $already_migrated[] = (int) $row['profiles_id'];
+        }
+        $legacy_where = ['name' => 'plugin_syncaad'];
+        if (!empty($already_migrated)) {
+            $legacy_where['profiles_id'] = $already_migrated;
+        }
+        $DB->delete('glpi_profilerights', $legacy_where);
+        $DB->update(
+            'glpi_profilerights',
+            ['name' => 'plugin_ssomicrosoft'],
+            ['name' => 'plugin_syncaad']
+        );
 
-    // Make the right usable: register it for every profile so it shows up in
-    // the profile form, then grant full access to the super-admin profile and
-    // to the profile currently used by the installer.
-    ProfileRight::addProfileRights(['plugin_ssomicrosoft']);
+        // Make the right usable: register it for every profile so it shows up in
+        // the profile form, then grant full access to the super-admin profile and
+        // to the profile currently used by the installer.
+        ProfileRight::addProfileRights(['plugin_ssomicrosoft']);
 
-    // Resolve the super-admin profile dynamically (it is id 4 on a default
-    // GLPI install, but may differ). Fall back to id 4 if not found.
-    $super_admin_id = 0;
-    foreach ($DB->request([
-        'SELECT' => 'id',
-        'FROM'   => 'glpi_profiles',
-        'WHERE'  => ['name' => 'Super-Admin'],
-    ]) as $row) {
-        $super_admin_id = (int) $row['id'];
-    }
-    if ($super_admin_id <= 0) {
-        $super_admin_id = 4;
-    }
+        // Resolve the super-admin profile dynamically (it is id 4 on a default
+        // GLPI install, but may differ). Fall back to id 4 if not found.
+        $super_admin_id = 0;
+        foreach ($DB->request([
+            'SELECT' => 'id',
+            'FROM'   => 'glpi_profiles',
+            'WHERE'  => ['name' => 'Super-Admin'],
+        ]) as $row) {
+            $super_admin_id = (int) $row['id'];
+        }
+        if ($super_admin_id <= 0) {
+            $super_admin_id = 4;
+        }
 
-    foreach ([$super_admin_id, (int) ($_SESSION['glpiactiveprofile']['id'] ?? 0)] as $profile_id) {
-        if ($profile_id > 0) {
-            // Grant the right and, for the active profile, refresh the running
-            // session so the configuration key works without re-logging in.
-            PluginSsomicrosoftProfile::createFirstAccess($profile_id);
-            $DB->update(
-                'glpi_profilerights',
-                ['rights' => READ | CREATE | UPDATE | DELETE | PURGE],
-                ['profiles_id' => $profile_id, 'name' => 'plugin_ssomicrosoft']
-            );
-            if (isset($_SESSION['glpiactiveprofile']['id'])
-                && (int) $_SESSION['glpiactiveprofile']['id'] === $profile_id) {
-                $_SESSION['glpiactiveprofile']['plugin_ssomicrosoft'] = READ | CREATE | UPDATE | DELETE | PURGE;
+        foreach ([$super_admin_id, (int) ($_SESSION['glpiactiveprofile']['id'] ?? 0)] as $profile_id) {
+            if ($profile_id > 0) {
+                // Grant the right and, for the active profile, refresh the running
+                // session so the configuration key works without re-logging in.
+                PluginSsomicrosoftProfile::createFirstAccess($profile_id);
+                $DB->update(
+                    'glpi_profilerights',
+                    ['rights' => READ | CREATE | UPDATE | DELETE | PURGE],
+                    ['profiles_id' => $profile_id, 'name' => 'plugin_ssomicrosoft']
+                );
+                if (isset($_SESSION['glpiactiveprofile']['id'])
+                    && (int) $_SESSION['glpiactiveprofile']['id'] === $profile_id) {
+                    $_SESSION['glpiactiveprofile']['plugin_ssomicrosoft'] = READ | CREATE | UPDATE | DELETE | PURGE;
+                }
             }
         }
+
+        // Drop any automatic action left over from the former plugin key.
+        $legacy_cron = new CronTask();
+        $legacy_cron->deleteByCriteria(['itemtype' => 'PluginSyncaadSync']);
+
+        // Register the account synchronisation as a GLPI automatic action so it can
+        // be scheduled and monitored from Configuration > Automatic actions and run
+        // by GLPI's own cron. Defaults to hourly, external (CLI) mode; the admin can
+        // adjust frequency and mode from the UI afterwards.
+        CronTask::register('PluginSsomicrosoftSync', 'ssomicrosoft', HOUR_TIMESTAMP, [
+            'mode'    => CronTask::MODE_EXTERNAL,
+            'state'   => CronTask::STATE_WAITING,
+            'comment' => 'Synchronisation des comptes Entra ID',
+        ]);
+    } catch (\Throwable $e) {
+        Toolbox::logInFile(
+            'ssomicrosoft',
+            'Étape post-installation non bloquante en échec (mise à jour poursuivie) : '
+            . $e->getMessage() . "\n"
+        );
     }
-
-    // Drop any automatic action left over from the former plugin key.
-    $legacy_cron = new CronTask();
-    $legacy_cron->deleteByCriteria(['itemtype' => 'PluginSyncaadSync']);
-
-    // Register the account synchronisation as a GLPI automatic action so it can
-    // be scheduled and monitored from Configuration > Automatic actions and run
-    // by GLPI's own cron. Defaults to hourly, external (CLI) mode; the admin can
-    // adjust frequency and mode from the UI afterwards.
-    CronTask::register('PluginSsomicrosoftSync', 'ssomicrosoft', HOUR_TIMESTAMP, [
-        'mode'    => CronTask::MODE_EXTERNAL,
-        'state'   => CronTask::STATE_WAITING,
-        'comment' => 'Synchronisation des comptes Entra ID',
-    ]);
 
     return true;
 }
