@@ -254,6 +254,18 @@ class PluginSsomicrosoftSso {
          curl_close($ch);
 
          if ($response === false || $status < 200 || $status >= 300) {
+            // Most often a 403 because the delegated GroupMember.Read.All
+            // permission is missing or was not (re-)consented after the scope
+            // was added. Log it so the absence of group mapping is explainable.
+            Toolbox::logInFile(
+               'ssomicrosoft',
+               sprintf(
+                  "SSO : échec de lecture des groupes (/me/transitiveMemberOf) HTTP %d. "
+                  . "Vérifiez la permission Déléguée « GroupMember.Read.All » (+ consentement). %s\n",
+                  $status,
+                  is_string($response) ? substr($response, 0, 400) : ''
+               )
+            );
             break;
          }
          $data = json_decode((string) $response, true);

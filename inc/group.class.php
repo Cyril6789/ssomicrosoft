@@ -63,6 +63,20 @@ class PluginSsomicrosoftGroup {
       //    configured on each group (DN match or field/value match).
       $group_ids = self::matchGlpiGroupIds($entraGroups);
 
+      // Diagnostic line: tells whether groups were received from Graph at all
+      // (0 received => GroupMember.Read.All probably missing / not consented)
+      // and whether any GLPI linkage matched (received > 0 but matched 0 =>
+      // the "DN du groupe" / ldap_value does not match the listed identifiers).
+      self::log(sprintf(
+         'Groupes pour %s (user #%d) : %d reçu(s) d\'Entra [%s] → %d groupe(s) GLPI rapproché(s)%s.',
+         (string) ($user->fields['name'] ?? '?'),
+         $users_id,
+         count($entraGroups),
+         self::describeEntraGroups($entraGroups),
+         count($group_ids),
+         $group_ids ? ' (groups_id: ' . implode(', ', $group_ids) . ')' : ''
+      ));
+
       // 2. Run the authorization rules ("Règles d'affectation d'habilitations")
       //    with those group ids, exactly like User::getFromLDAP() does. Groups
       //    assigned by a rule are returned in _ldap_rules['groups_id'] and must
@@ -208,5 +222,33 @@ class PluginSsomicrosoftGroup {
          }
       }
       return (bool) preg_match('/^' . $regex . '$/i', $value);
+   }
+
+   /**
+    * Build a short, readable summary of the Entra groups for the diagnostic
+    * log: the DN when present (what "DN du groupe" must match for AD-synced
+    * groups), otherwise the display name. Capped so the log stays compact.
+    */
+   private static function describeEntraGroups(array $entraGroups): string {
+      if (empty($entraGroups)) {
+         return 'aucun';
+      }
+
+      $labels = [];
+      foreach ($entraGroups as $g) {
+         $labels[] = trim((string) ($g['onPremisesDistinguishedName'] ?? ''))
+                  ?: trim((string) ($g['displayName'] ?? ''))
+                  ?: trim((string) ($g['id'] ?? '?'));
+      }
+
+      $shown = array_slice($labels, 0, 15);
+      $more  = count($labels) - count($shown);
+
+      return implode(' | ', $shown) . ($more > 0 ? sprintf(' | … (+%d)', $more) : '');
+   }
+
+   /** Write a diagnostic line to the plugin log (files/_log/ssomicrosoft.log). */
+   private static function log(string $message): void {
+      Toolbox::logInFile('ssomicrosoft', $message . "\n");
    }
 }
