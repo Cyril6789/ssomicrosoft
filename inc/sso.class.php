@@ -14,6 +14,13 @@ class PluginSsomicrosoftSso {
    private const SESSION_STATE = 'plugin_ssomicrosoft_sso_state';
    private const SESSION_CONN  = 'plugin_ssomicrosoft_sso_conn';
 
+   // Delegated scopes requested for the SSO (OpenID Connect) flow.
+   // GroupMember.Read.All lets us read the signed-in user's group memberships
+   // (/me/transitiveMemberOf) so GLPI groups and habilitation rules can be
+   // applied like with LDAP. It must also be granted (with admin consent) as a
+   // Delegated permission on the Entra app registration.
+   private const SCOPES = 'openid profile email User.Read GroupMember.Read.All';
+
    // Name of the short-lived cookie used as a fallback for the OAuth state.
    // The PHP session is not always preserved across the cross-site redirect
    // back from Microsoft (e.g. a SameSite=Strict session cookie is withheld on
@@ -53,7 +60,7 @@ class PluginSsomicrosoftSso {
          'response_type' => 'code',
          'redirect_uri'  => self::getRedirectUri($conn),
          'response_mode' => 'query',
-         'scope'         => 'openid profile email User.Read',
+         'scope'         => self::SCOPES,
          'state'         => $state,
       ];
 
@@ -132,6 +139,14 @@ class PluginSsomicrosoftSso {
          self::fail(__('Ce compte est désactivé dans GLPI.', 'ssomicrosoft'));
       }
 
+      // Reflect the user's Entra group memberships into GLPI groups and
+      // habilitation rules, like the native LDAP login. Skipped (no Graph call)
+      // when no GLPI group carries an LDAP linkage, so it stays a no-op until an
+      // administrator opts in by configuring group mappings.
+      if (PluginSsomicrosoftGroup::hasMappings()) {
+         PluginSsomicrosoftGroup::apply($user->getID(), self::fetchMyGroups($token['access_token']));
+      }
+
       if (!self::login($user)) {
          self::fail(__('La connexion à GLPI a échoué (aucune habilitation valide ?).', 'ssomicrosoft'));
       }
@@ -175,7 +190,7 @@ class PluginSsomicrosoftSso {
          'grant_type'    => 'authorization_code',
          'code'          => $code,
          'redirect_uri'  => self::getRedirectUri($conn),
-         'scope'         => 'openid profile email User.Read',
+         'scope'         => self::SCOPES,
       ]);
       if ($response === null) {
          return null;
@@ -206,6 +221,52 @@ class PluginSsomicrosoftSso {
 
       $data = json_decode((string) $response, true);
       return is_array($data) ? $data : null;
+   }
+
+   /**
+    * Fetch the signed-in user's group memberships from Microsoft Graph.
+    *
+    * Uses transitiveMemberOf so nested group memberships are resolved (like an
+    * LDAP recursive group search), restricted to actual groups. Requires the
+    * delegated GroupMember.Read.All permission. Failures are non-fatal: an empty
+    * list simply means no group is mapped for this login.
+    *
+    * @return array<int, array> Graph group objects.
+    */
+   private static function fetchMyGroups(string $access_token): array {
+      $select = 'id,displayName,onPremisesDistinguishedName,onPremisesSamAccountName';
+      $url    = 'https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group'
+              . '?$select=' . $select . '&$top=999';
+
+      $groups = [];
+      $guard  = 0;
+      while ($url && $guard < 1000) {
+         $guard++;
+         $ch = curl_init($url);
+         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+         curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Authorization: Bearer ' . $access_token,
+            'Content-Type: application/json',
+         ]);
+         curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+         $response = curl_exec($ch);
+         $status   = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+         curl_close($ch);
+
+         if ($response === false || $status < 200 || $status >= 300) {
+            break;
+         }
+         $data = json_decode((string) $response, true);
+         if (!is_array($data)) {
+            break;
+         }
+         foreach (($data['value'] ?? []) as $group) {
+            $groups[] = $group;
+         }
+         $url = $data['@odata.nextLink'] ?? null;
+      }
+
+      return $groups;
    }
 
    /**
