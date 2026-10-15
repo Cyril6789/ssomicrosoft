@@ -55,11 +55,6 @@ class PluginSsomicrosoftSso {
          throw new \Glpi\Exception\Http\AccessDeniedHttpException();
       }
 
-      $user = new User();
-      if (!$user->getFromDB($users_id)) {
-         throw new \Glpi\Exception\Http\AccessDeniedHttpException();
-      }
-
       // Keep the callback identifiable even if PHP does not restore the
       // initiating session. Without this marker, front/sso.php could mistake
       // a re-auth callback for a normal login callback and send the user home.
@@ -77,7 +72,6 @@ class PluginSsomicrosoftSso {
          'scope'         => self::SCOPES,
          'state'         => $state,
          'prompt'        => 'login',
-         'login_hint'    => (string) $user->fields['name'],
       ];
 
       return 'https://login.microsoftonline.com/' . rawurlencode($conn['tenant_id'])
@@ -176,26 +170,38 @@ class PluginSsomicrosoftSso {
          }
       }
 
-      // Prefer a connection with an explicit domain matching this GLPI user.
+      // Use a connection with an explicit domain matching this GLPI user only
+      // when the match is unique. Picking the first match can send the user to
+      // an unrelated tenant when several SSO connections accept that domain.
+      $matching_connections = [];
       foreach ($connections as $connection) {
          if (empty(PluginSsomicrosoftConnection::parseEmailFilters($connection['email_filter'] ?? ''))) {
             continue;
          }
          foreach ($identities as $identity) {
             if (self::matchesDomain($connection, $identity)) {
-               return $connection;
+               $matching_connections[] = $connection;
+               break;
             }
          }
       }
+      if (count($matching_connections) === 1) {
+         return $matching_connections[0];
+      }
+      if (count($matching_connections) > 1) {
+         return null;
+      }
 
-      // An empty domain filter accepts all accounts, as it does for normal SSO.
+      // A generic connection is safe to use only when it is the sole generic
+      // connection; otherwise there is no reliable way to infer the tenant.
+      $generic_connections = [];
       foreach ($connections as $connection) {
          if (empty(PluginSsomicrosoftConnection::parseEmailFilters($connection['email_filter'] ?? ''))) {
-            return $connection;
+            $generic_connections[] = $connection;
          }
       }
 
-      return null;
+      return count($generic_connections) === 1 ? $generic_connections[0] : null;
    }
 
    /** Step 1: redirect the browser to the Entra ID authorization endpoint. */
