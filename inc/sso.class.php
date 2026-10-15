@@ -13,6 +13,7 @@ class PluginSsomicrosoftSso {
 
    private const SESSION_STATE = 'plugin_ssomicrosoft_sso_state';
    private const SESSION_CONN  = 'plugin_ssomicrosoft_sso_conn';
+   private const SESSION_SSO_CONN = 'plugin_ssomicrosoft_sso_connection_id';
 
    // Delegated scopes requested for the SSO (OpenID Connect) flow.
    // GroupMember.Read.All lets us read the signed-in user's group memberships
@@ -54,6 +55,11 @@ class PluginSsomicrosoftSso {
       if ($conn === null) {
          throw new \Glpi\Exception\Http\AccessDeniedHttpException();
       }
+
+      // Keep the selected SSO connection attached to this authenticated GLPI
+      // session so GLPI can select this strategy again on the OAuth callback,
+      // even when the user record itself is linked to LDAP.
+      $_SESSION[self::SESSION_SSO_CONN] = (int) $conn['id'];
 
       // Keep the callback identifiable even if PHP does not restore the
       // initiating session. Without this marker, front/sso.php could mistake
@@ -147,7 +153,7 @@ class PluginSsomicrosoftSso {
          return null;
       }
 
-      $preferred_id = (int) ($_SESSION['plugin_ssomicrosoft_sso_connection_id'] ?? 0);
+      $preferred_id = (int) ($_SESSION[self::SESSION_SSO_CONN] ?? 0);
       $identities = [(string) ($user->fields['name'] ?? '')];
       $email = UserEmail::getDefaultForUser($users_id);
       if (is_string($email) && $email !== '') {
@@ -326,7 +332,7 @@ class PluginSsomicrosoftSso {
          self::fail(__('La connexion à GLPI a échoué (aucune habilitation valide ?).', 'ssomicrosoft'));
       }
 
-      $_SESSION['plugin_ssomicrosoft_sso_connection_id'] = (int) $conn['id'];
+      $_SESSION[self::SESSION_SSO_CONN] = (int) $conn['id'];
 
       self::redirectHome();
    }

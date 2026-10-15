@@ -35,15 +35,26 @@ class PluginSsomicrosoftReAuth extends InPlaceReAuthStrategy {
    public function isAvailable(int $users_id, int $entities_id = 0): bool {
       global $DB;
 
-      if (($_SESSION['glpiauthtype'] ?? Auth::NOT_YET_AUTHENTIFIED) !== Auth::EXTERNAL
+      $sso_connection_id = (int) ($_SESSION['plugin_ssomicrosoft_sso_connection_id'] ?? 0);
+      $is_external_session = ($_SESSION['glpiauthtype'] ?? Auth::NOT_YET_AUTHENTIFIED) === Auth::EXTERNAL;
+
+      if ((!$is_external_session && $sso_connection_id <= 0)
           || $users_id <= 0
           || !$DB->tableExists('glpi_plugin_ssomicrosoft_connections')) {
          return false;
       }
 
+      $where = ['active' => 1, 'sso_enabled' => 1];
+      if ($sso_connection_id > 0) {
+         // A stored connection ID binds this authenticated session to the SSO
+         // provider selected at login and keeps it available on the callback,
+         // even when GLPI records the underlying user as LDAP-authenticated.
+         $where['id'] = $sso_connection_id;
+      }
+
       return count($DB->request([
          'FROM'  => 'glpi_plugin_ssomicrosoft_connections',
-         'WHERE' => ['active' => 1, 'sso_enabled' => 1],
+         'WHERE' => $where,
       ])) > 0;
    }
 
