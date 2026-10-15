@@ -1,10 +1,10 @@
 <?php
 
-define('PLUGIN_SSOMICROSOFT_VERSION', '2.2.0');
+define('PLUGIN_SSOMICROSOFT_VERSION', '3.0.0');
 
 // Minimal/maximal GLPI version, inclusive/exclusive
-define('PLUGIN_SSOMICROSOFT_MIN_GLPI', '11.0.0');
-define('PLUGIN_SSOMICROSOFT_MAX_GLPI', '11.0.99');
+define('PLUGIN_SSOMICROSOFT_MIN_GLPI', '12.0.0');
+define('PLUGIN_SSOMICROSOFT_MAX_GLPI', '12.1.0');
 
 /**
  * Plugin metadata.
@@ -22,7 +22,7 @@ function plugin_version_ssomicrosoft() {
                 'max' => PLUGIN_SSOMICROSOFT_MAX_GLPI,
             ],
             'php'  => [
-                'min' => '8.1',
+                'min' => '8.3',
             ],
         ],
     ];

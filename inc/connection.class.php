@@ -9,9 +9,9 @@ if (!defined('GLPI_ROOT')) {
  * optionally, for SSO authentication.
  */
 class PluginSsomicrosoftConnection extends CommonDBTM {
-   public static $rightname = 'plugin_ssomicrosoft';
+   public static string $rightname = 'plugin_ssomicrosoft';
 
-   public $dohistory = true;
+   public bool $dohistory = true;
 
    static function getTypeName($nb = 0) {
       return _n('Connexion Entra ID', 'Connexions Entra ID', $nb, 'ssomicrosoft');

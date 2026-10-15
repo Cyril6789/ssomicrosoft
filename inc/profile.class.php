@@ -16,7 +16,7 @@ class PluginSsomicrosoftProfile extends Profile {
 
    // We piggyback on the core "profile" right: only users allowed to edit
    // profiles may change the plugin rights matrix.
-   public static $rightname = 'profile';
+   public static string $rightname = 'profile';
 
    /**
     * Description of the rights handled by the plugin.
@@ -113,7 +113,7 @@ class PluginSsomicrosoftProfile extends Profile {
     *
     * @param int $profiles_id
     */
-   function showForm($profiles_id = 0, $options = []) {
+   function showForm($profiles_id = 0, array $options = []) {
       $profile = new Profile();
       $profile->getFromDB($profiles_id);
 

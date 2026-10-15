@@ -2,7 +2,7 @@
 
 Plugin GLPI **« SSO Microsoft »** qui synchronise les utilisateurs depuis **Microsoft Entra ID** (ex‑Azure AD) et offre une **connexion SSO** (OpenID Connect / OAuth 2.0) aux utilisateurs GLPI.
 
-Compatible **GLPI 11.x** (testé sur la branche 11.0).
+Version **3.0.0**, adaptée aux API de **GLPI 12.0.x** (GLPI ≥ 12.0.0 et < 12.1.0).
 
 ## Fonctionnalités
 
@@ -37,8 +37,8 @@ Compatible **GLPI 11.x** (testé sur la branche 11.0).
 
 ## Prérequis
 
-- GLPI 11.0.x
-- PHP ≥ 8.1 avec l'extension **cURL**
+- GLPI 12.0.x
+- PHP ≥ 8.3 avec l'extension **cURL**
 - Un accès administrateur à un tenant **Microsoft Entra ID**
 
 ## Installation
@@ -50,6 +50,23 @@ Compatible **GLPI 11.x** (testé sur la branche 11.0).
 > Le droit `plugin_ssomicrosoft` est accordé automatiquement au profil **Super‑Admin**
 > (et au profil de l'installateur) lors de l'installation, puis modifiable pour chaque profil
 > via **Administration → Profils → onglet « SSO Microsoft »**.
+
+## Mise à jour depuis GLPI 11
+
+Conserver les connexions et les tables existantes : ne pas désinstaller le plugin.
+Après remplacement des fichiers, utiliser **Mettre à jour**, puis **Activer** si
+GLPI le demande dans **Configuration → Plugins**. Aucun changement de l’URL de
+retour Entra ID n’est nécessaire.
+
+La connexion SSO passe désormais par `Auth::login()` de GLPI 12 : le MFA GLPI,
+le suivi/révocation des sessions et les nouveaux jetons « se souvenir de moi »
+sont gérés par le cœur. Un MFA activé ou imposé dans GLPI peut donc demander une
+étape supplémentaire après l’authentification Microsoft.
+
+Avant validation fonctionnelle, vérifier depuis un navigateur le bouton SSO,
+le retour Microsoft, les habilitations et la persistance après fermeture du
+navigateur ; vérifier aussi le formulaire des connexions et l’onglet des droits.
+La validation du code seule ne constitue pas un test SSO de bout en bout.
 
 ## Enregistrement de l'application dans Entra ID
 
