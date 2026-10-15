@@ -1,6 +1,6 @@
 <?php
 
-define('PLUGIN_SSOMICROSOFT_VERSION', '3.0.0');
+define('PLUGIN_SSOMICROSOFT_VERSION', '3.1.0');
 
 // Minimal/maximal GLPI version, inclusive/exclusive
 define('PLUGIN_SSOMICROSOFT_MIN_GLPI', '12.0.0');
@@ -59,6 +59,14 @@ function plugin_init_ssomicrosoft() {
 
     $PLUGIN_HOOKS['csrf_compliant']['ssomicrosoft'] = true;
 
+    // GLPI 12 step-up authentication: use Entra for sessions opened by SSO.
+    if (class_exists(\Glpi\Security\ReAuth\ReAuthManager::class)
+        && method_exists(\Glpi\Security\ReAuth\ReAuthManager::class, 'registerStrategy')) {
+        \Glpi\Security\ReAuth\ReAuthManager::getInstance()->registerStrategy(
+            new PluginSsomicrosoftReAuth()
+        );
+    }
+
     Plugin::registerClass('PluginSsomicrosoftConnection');
 
     // Expose the plugin rights in the standard profile form so that a
@@ -81,7 +89,7 @@ function plugin_init_ssomicrosoft() {
     $PLUGIN_HOOKS['display_login']['ssomicrosoft'] = 'plugin_ssomicrosoft_display_login';
 
     // The SSO start/callback endpoint must be reachable by unauthenticated users.
-    if (class_exists('Glpi\\Http\\Firewall')) {
+    if (class_exists('Glpi\Http\Firewall')) {
         Glpi\Http\Firewall::addPluginStrategyForLegacyScripts(
             'ssomicrosoft',
             '#^/front/sso\.php#',

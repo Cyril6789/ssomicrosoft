@@ -2,7 +2,7 @@
 
 Plugin GLPI **« SSO Microsoft »** qui synchronise les utilisateurs depuis **Microsoft Entra ID** (ex‑Azure AD) et offre une **connexion SSO** (OpenID Connect / OAuth 2.0) aux utilisateurs GLPI.
 
-Version **3.0.0**, adaptée aux API de **GLPI 12.0.x** (GLPI ≥ 12.0.0 et < 12.1.0).
+Version **3.1.0**, adaptée aux API de **GLPI 12.0.x** (GLPI ≥ 12.0.0 et < 12.1.0).
 
 ## Fonctionnalités
 
@@ -57,6 +57,12 @@ Conserver les connexions et les tables existantes : ne pas désinstaller le plug
 Après remplacement des fichiers, utiliser **Mettre à jour**, puis **Activer** si
 GLPI le demande dans **Configuration → Plugins**. Aucun changement de l’URL de
 retour Entra ID n’est nécessaire.
+
+Pour les utilisateurs connectés par SSO, une zone sensible de GLPI 12 peut exiger
+une nouvelle preuve d’identité. Le bouton de confirmation renvoie vers Entra ID et
+force une nouvelle saisie des identifiants (`prompt=login`) ; le plugin vérifie que
+le compte Microsoft correspond au même utilisateur GLPI avant de reprendre l’action.
+Le formulaire n’accepte pas le mot de passe Microsoft directement dans GLPI.
 
 La connexion SSO passe désormais par `Auth::login()` de GLPI 12 : le MFA GLPI,
 le suivi/révocation des sessions et les nouveaux jetons « se souvenir de moi »

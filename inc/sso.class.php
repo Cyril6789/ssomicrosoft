@@ -40,6 +40,154 @@ class PluginSsomicrosoftSso {
       return rtrim($CFG_GLPI['url_base'], '/') . '/plugins/ssomicrosoft/front/sso.php';
    }
 
+   private const SESSION_REAUTH_STATE = 'plugin_ssomicrosoft_reauth_state';
+   private const SESSION_REAUTH_CONN  = 'plugin_ssomicrosoft_reauth_conn';
+   private const SESSION_REAUTH_USER  = 'plugin_ssomicrosoft_reauth_user';
+   private const SESSION_REAUTH_TIME  = 'plugin_ssomicrosoft_reauth_time';
+
+   /** Start a fresh Entra authentication for the currently authenticated GLPI user. */
+   public static function startReauthentication(int $users_id): string {
+      global $CFG_GLPI;
+
+      $conn = self::getReauthenticationConnection($users_id);
+      if ($conn === null) {
+         throw new \Glpi\Exception\Http\AccessDeniedHttpException();
+      }
+
+      $user = new User();
+      if (!$user->getFromDB($users_id)) {
+         throw new \Glpi\Exception\Http\AccessDeniedHttpException();
+      }
+
+      $state = bin2hex(random_bytes(32));
+      $_SESSION[self::SESSION_REAUTH_STATE] = $state;
+      $_SESSION[self::SESSION_REAUTH_CONN]  = (int) $conn['id'];
+      $_SESSION[self::SESSION_REAUTH_USER]  = $users_id;
+      $_SESSION[self::SESSION_REAUTH_TIME]  = time();
+
+      $params = [
+         'client_id'     => $conn['client_id'],
+         'response_type' => 'code',
+         'redirect_uri'  => self::getRedirectUri($conn),
+         'response_mode' => 'query',
+         'scope'         => self::SCOPES,
+         'state'         => $state,
+         'prompt'        => 'login',
+         'login_hint'    => (string) $user->fields['name'],
+      ];
+
+      return 'https://login.microsoftonline.com/' . rawurlencode($conn['tenant_id'])
+           . '/oauth2/v2.0/authorize?' . http_build_query($params);
+   }
+
+   /** A state is pending only in the GLPI session that initiated the round trip. */
+   public static function hasPendingReauthentication(): bool {
+      return isset($_SESSION[self::SESSION_REAUTH_STATE]);
+   }
+
+   /** Validate the one-time state and confirm Microsoft returned the same GLPI user. */
+   public static function completeReauthentication(int $users_id, string $state, string $code): bool {
+      $expected_state = (string) ($_SESSION[self::SESSION_REAUTH_STATE] ?? '');
+      $expected_user  = (int) ($_SESSION[self::SESSION_REAUTH_USER] ?? 0);
+      $connection_id  = (int) ($_SESSION[self::SESSION_REAUTH_CONN] ?? 0);
+      $started_at     = (int) ($_SESSION[self::SESSION_REAUTH_TIME] ?? 0);
+
+      // Consume state on every callback so it cannot be replayed.
+      unset(
+         $_SESSION[self::SESSION_REAUTH_STATE],
+         $_SESSION[self::SESSION_REAUTH_CONN],
+         $_SESSION[self::SESSION_REAUTH_USER],
+         $_SESSION[self::SESSION_REAUTH_TIME]
+      );
+
+      if ($expected_state === '' || $state === '' || !hash_equals($expected_state, $state)
+          || $expected_user !== $users_id || $started_at <= 0 || time() - $started_at > 600
+          || $code === '') {
+         return false;
+      }
+
+      $conn = self::getConnection($connection_id, true);
+      if ($conn === null) {
+         return false;
+      }
+
+      $token = self::exchangeCode($conn, $code);
+      if (!$token || empty($token['access_token'])) {
+         return false;
+      }
+
+      $me = self::fetchMe($token['access_token']);
+      if (!$me) {
+         return false;
+      }
+
+      $identity = PluginSsomicrosoftUser::normalize($me);
+      if (!self::matchesDomain($conn, $identity['email'])
+          && !self::matchesDomain($conn, $identity['login'])) {
+         return false;
+      }
+
+      $matched_user = PluginSsomicrosoftUser::find($identity['login'], $identity['email']);
+      return $matched_user !== null
+          && $matched_user->getID() === $users_id
+          && !empty($matched_user->fields['is_active'])
+          && empty($matched_user->fields['is_deleted']);
+   }
+
+   /** Pick the configured SSO connection associated with this GLPI user's e-mail domain. */
+   private static function getReauthenticationConnection(int $users_id): ?array {
+      global $DB;
+
+      $user = new User();
+      if (!$user->getFromDB($users_id)) {
+         return null;
+      }
+
+      $preferred_id = (int) ($_SESSION['plugin_ssomicrosoft_sso_connection_id'] ?? 0);
+      $identities = [(string) ($user->fields['name'] ?? '')];
+      $email = UserEmail::getDefaultForUser($users_id);
+      if (is_string($email) && $email !== '') {
+         $identities[] = $email;
+      }
+
+      $connections = [];
+      foreach ($DB->request([
+         'FROM'  => 'glpi_plugin_ssomicrosoft_connections',
+         'WHERE' => ['active' => 1, 'sso_enabled' => 1],
+         'ORDER' => 'id ASC',
+      ]) as $connection) {
+         $connections[] = $connection;
+      }
+
+      // Prefer the connection used for this login when it remains enabled.
+      foreach ($connections as $connection) {
+         if ((int) $connection['id'] === $preferred_id) {
+            return $connection;
+         }
+      }
+
+      // Prefer a connection with an explicit domain matching this GLPI user.
+      foreach ($connections as $connection) {
+         if (empty(PluginSsomicrosoftConnection::parseEmailFilters($connection['email_filter'] ?? ''))) {
+            continue;
+         }
+         foreach ($identities as $identity) {
+            if (self::matchesDomain($connection, $identity)) {
+               return $connection;
+            }
+         }
+      }
+
+      // An empty domain filter accepts all accounts, as it does for normal SSO.
+      foreach ($connections as $connection) {
+         if (empty(PluginSsomicrosoftConnection::parseEmailFilters($connection['email_filter'] ?? ''))) {
+            return $connection;
+         }
+      }
+
+      return null;
+   }
+
    /** Step 1: redirect the browser to the Entra ID authorization endpoint. */
    public static function startLogin(int $connection_id): void {
       $conn = self::getConnection($connection_id, true);
@@ -161,6 +309,8 @@ class PluginSsomicrosoftSso {
       if (!self::login($user)) {
          self::fail(__('La connexion à GLPI a échoué (aucune habilitation valide ?).', 'ssomicrosoft'));
       }
+
+      $_SESSION['plugin_ssomicrosoft_sso_connection_id'] = (int) $conn['id'];
 
       self::redirectHome();
    }
@@ -320,7 +470,7 @@ class PluginSsomicrosoftSso {
     * (e.g. "@contoso.com, @fabrikam.com"); the value matches if it ends with
     * any of them. An empty filter accepts everything.
     */
-   private static function matchesDomain(array $conn, string $value): bool {
+   public static function matchesDomain(array $conn, string $value): bool {
       $filters = PluginSsomicrosoftConnection::parseEmailFilters($conn['email_filter'] ?? '');
       if (empty($filters)) {
          return true;
