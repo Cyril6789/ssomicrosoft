@@ -26,7 +26,10 @@ class PluginSsomicrosoftReAuth extends InPlaceReAuthStrategy {
    }
 
    public function getVerifyHttpMethod(): string {
-      return 'GET';
+      // The verify URL carries action=reauth_start in its query string.
+      // HTML GET forms replace that query with their form fields, dropping
+      // the action and sending the user back to GLPI's default landing page.
+      return 'POST';
    }
 
    public function isAvailable(int $users_id, int $entities_id = 0): bool {
