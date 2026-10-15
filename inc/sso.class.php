@@ -44,6 +44,7 @@ class PluginSsomicrosoftSso {
    private const SESSION_REAUTH_CONN  = 'plugin_ssomicrosoft_reauth_conn';
    private const SESSION_REAUTH_USER  = 'plugin_ssomicrosoft_reauth_user';
    private const SESSION_REAUTH_TIME  = 'plugin_ssomicrosoft_reauth_time';
+   private const REAUTH_STATE_PREFIX  = 'ssomicrosoft_reauth_';
 
    /** Start a fresh Entra authentication for the currently authenticated GLPI user. */
    public static function startReauthentication(int $users_id): string {
@@ -59,7 +60,10 @@ class PluginSsomicrosoftSso {
          throw new \Glpi\Exception\Http\AccessDeniedHttpException();
       }
 
-      $state = bin2hex(random_bytes(32));
+      // Keep the callback identifiable even if PHP does not restore the
+      // initiating session. Without this marker, front/sso.php could mistake
+      // a re-auth callback for a normal login callback and send the user home.
+      $state = self::REAUTH_STATE_PREFIX . bin2hex(random_bytes(32));
       $_SESSION[self::SESSION_REAUTH_STATE] = $state;
       $_SESSION[self::SESSION_REAUTH_CONN]  = (int) $conn['id'];
       $_SESSION[self::SESSION_REAUTH_USER]  = $users_id;
@@ -83,6 +87,12 @@ class PluginSsomicrosoftSso {
    /** A state is pending only in the GLPI session that initiated the round trip. */
    public static function hasPendingReauthentication(): bool {
       return isset($_SESSION[self::SESSION_REAUTH_STATE]);
+   }
+
+   /** Identify a re-authentication callback without relying on session state. */
+   public static function isReauthenticationCallback(): bool {
+      $state = (string) ($_GET['state'] ?? '');
+      return str_starts_with($state, self::REAUTH_STATE_PREFIX);
    }
 
    /** Validate the one-time state and confirm Microsoft returned the same GLPI user. */

@@ -17,7 +17,31 @@ if ($action === 'reauth_start') {
     }
     Html::redirect(PluginSsomicrosoftSso::startReauthentication(Session::getLoginUserID()));
 } elseif ((isset($_GET['code']) || isset($_GET['error']))
-    && PluginSsomicrosoftSso::hasPendingReauthentication()) {
+    && PluginSsomicrosoftSso::isReauthenticationCallback()) {
+    // If GLPI's session cookie is SameSite=Strict, browsers omit it on the
+    // first navigation back from Microsoft. Bounce through a same-site page
+    // before checking the session so the original authenticated session is
+    // sent on the resumed callback.
+    if (!isset($_GET['_ssomicrosoft_resume'])) {
+        $callback_params = [
+            'state'              => (string) ($_GET['state'] ?? ''),
+            'code'               => (string) ($_GET['code'] ?? ''),
+            'error'              => (string) ($_GET['error'] ?? ''),
+            'error_description' => (string) ($_GET['error_description'] ?? ''),
+            '_ssomicrosoft_resume' => '1',
+        ];
+        $callback_params = array_filter($callback_params, static fn($value) => $value !== '');
+        $resume_url = $CFG_GLPI['root_doc'] . '/plugins/ssomicrosoft/front/sso.php?'
+                    . http_build_query($callback_params);
+
+        Html::nullHeader(__('SSO Microsoft', 'ssomicrosoft'));
+        echo '<meta http-equiv="refresh" content="0;url=' . htmlspecialchars($resume_url) . '">';
+        echo '<script>window.location.replace(' . json_encode($resume_url) . ');</script>';
+        echo '<a href="' . htmlspecialchars($resume_url) . '">' . __('Continuer', 'ssomicrosoft') . '</a>';
+        Html::nullFooter();
+        exit;
+    }
+
     Session::checkLoginUser();
     $manager = Glpi\Security\ReAuth\ReAuthManager::getInstance();
     if (!$manager->isSelectedStrategy(PluginSsomicrosoftReAuth::class)) {
