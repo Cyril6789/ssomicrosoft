@@ -18,6 +18,14 @@ class PluginSsomicrosoftAuth extends Auth {
    }
 
    public function validateLogin(string $login_name, string $login_password, bool $noauto = false, string $login_auth = ''): bool {
+      // SSO is the authoritative authentication method for LDAP-backed users
+      // who sign in through Entra. Keeping authtype=LDAP makes GLPI's remember-
+      // me restoration attempt a passwordless LDAP bind after browser restart.
+      if ((int) ($this->user->fields['authtype'] ?? 0) === Auth::LDAP) {
+         $this->user->fields['authtype'] = Auth::EXTERNAL;
+         $this->user->fields['auths_id'] = 0;
+      }
+
       $this->auth_succeded = $this->user->getID() > 0
          && $login_name === (string) $this->user->fields['name']
          && !empty($this->user->fields['is_active'])

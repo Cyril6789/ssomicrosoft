@@ -122,3 +122,11 @@ Les fichiers principaux sont `inc/reauth.class.php`, `inc/sso.class.php`, `front
 - Changement : remplacer `prompt=login` par `prompt=select_account`. Entra propose les comptes mémorisés et peut réutiliser la session existante. Les règles Entra, dont les exigences MFA, restent applicables.
 - Limite de sécurité : la session Microsoft existante peut suffire à confirmer l'action; cela ne garantit pas une nouvelle saisie d'identifiants ni un MFA à chaque sudo. Le plugin continue de vérifier que l'identité Microsoft correspond à l'utilisateur GLPI courant.
 - README ajusté pour documenter ce comportement. Aucun test lancé; essai navigateur à faire sur une zone sensible.
+
+### 2026-10-16 — restauration de session après fermeture du navigateur
+
+- Reproduction utilisateur : après fermeture/réouverture du navigateur, GLPI affiche « Échec de connexion à l'annuaire LDAP — Identifiant ou mot de passe vide ».
+- Cause : le plugin demandait le cookie GLPI « Se souvenir de moi » dès que `login_remember_time` était configuré. À la restauration du cookie, GLPI 12 reprend le login de l'utilisateur mais, si `authtype=LDAP`, tente de synchroniser/vérifier le compte par LDAP sans mot de passe. Le cookie n'est donc pas expiré trop tôt; c'est la restauration du compte LDAP qui échoue.
+- Changement : dans l'adaptateur d'authentification, lorsqu'une identité Microsoft validée est celle d'un compte `authtype=LDAP`, la classification GLPI devient `EXTERNAL` et `auths_id` est remis à 0. Le compte pourra alors utiliser le jeton « Se souvenir de moi » sans retomber dans l'authentification LDAP.
+- Impact : GLPI ne l'authentifiera plus ni ne le synchronisera directement par LDAP. La synchronisation d'attributs/groupes devra passer par le plugin Entra. Les utilisateurs qui ont un ancien jeton de rappel doivent effectuer une nouvelle connexion SSO après déploiement pour émettre un jeton avec le nouveau comportement.
+- Aucun test automatisé lancé; à valider en navigateur : connexion SSO d'un compte LDAP, fermer entièrement le navigateur, le rouvrir et accéder à GLPI.

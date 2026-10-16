@@ -71,6 +71,12 @@ le suivi/révocation des sessions et les nouveaux jetons « se souvenir de moi �
 sont gérés par le cœur. Un MFA activé ou imposé dans GLPI peut donc demander une
 étape supplémentaire après l’authentification Microsoft.
 
+Lorsqu’un utilisateur lié à LDAP se connecte par Entra, le plugin classe son
+authentification comme externe dans GLPI. Cela permet au cookie « Se souvenir de
+moi » de restaurer la session sans essayer un bind LDAP sans mot de passe. Le plugin
+Entra reste responsable de la synchronisation des attributs et groupes ; GLPI ne
+doit plus authentifier ce compte directement auprès de LDAP.
+
 Avant validation fonctionnelle, vérifier depuis un navigateur le bouton SSO,
 le retour Microsoft, les habilitations et la persistance après fermeture du
 navigateur ; vérifier aussi le formulaire des connexions et l’onglet des droits.
