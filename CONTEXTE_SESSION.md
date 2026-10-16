@@ -96,3 +96,11 @@ Les fichiers principaux sont `inc/reauth.class.php`, `inc/sso.class.php`, `front
 - Vérification de la compatibilité : la version déclarée du plugin est 3.1.0, avec `PLUGIN_SSOMICROSOFT_MIN_GLPI = 12.0.0`, `MAX_GLPI = 12.1.0` et PHP minimum 8.3.
 - Le parcours de réauthentification dépend de `Glpi\Security\ReAuth\ReAuthManager` et de `InPlaceReAuthStrategy`, APIs GLPI 12. L'adaptateur d'authentification a également été migré vers le workflow `Auth::login()` de GLPI 12.
 - Conclusion : cette version n'est pas rétrocompatible ni déclarée compatible avec GLPI 11. Rendre une seule version compatible avec GLPI 11 et 12 demanderait des chemins conditionnels/API adaptés et une validation séparée sur les deux versions ; ce travail n'a pas été entrepris.
+
+### 2026-10-16 — branche de publication GLPI 12
+
+- L'utilisateur a demandé de publier les commits dans une branche `glpi12`.
+- Création de la branche locale `glpi12` à partir de `65acafee9e462079c529c9f73739bf2f2d3d8d55` (état de `main`, 15 commits en avance sur `origin/main`).
+- Le push `git push -u origin glpi12` a échoué car Git ne dispose pas d'identifiants HTTPS interactifs (`could not read Username`). L'URL distante est `https://github.com/Cyril6789/ssomicrosoft.git`.
+- La branche distante `glpi12` n'a donc pas été créée et aucun commit n'a été publié. La branche locale active est `glpi12`.
+- Suite : réessayer le push dès que des identifiants GitHub sont configurés dans l'environnement.
