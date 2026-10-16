@@ -58,6 +58,8 @@ Les fichiers principaux sont `inc/reauth.class.php`, `inc/sso.class.php`, `front
 - La stratégie LDAP native (`LdapReAuthStrategy`) exécute `Auth::connection_ldap()` dans sa méthode `verify()`. Le callback du plugin ne passe pas par cette méthode puisque son URL de vérification est son propre endpoint `front/sso.php?action=reauth_start`.
 - `ReAuthManager` sélectionne la stratégie disponible de priorité la plus haute. Le plugin est à 60, contre 50 pour la stratégie LDAP. Comme l'utilisateur est redirigé vers Microsoft, le plugin a bien été choisi au départ.
 - `Session::checkLoginUser()` ne fait que vérifier la validité de la session et `glpiname`; il n'effectue pas de bind LDAP.
+- `Session::init()` détruit/recrée la session et ne conserve qu'une liste blanche de clés. Le plugin écrit correctement `plugin_ssomicrosoft_sso_connection_id` après `Auth::login()` ; déplacer cette écriture avant le login ferait perdre l'ID de connexion au SSO.
 - Les logs GLPI listés sous `/var/www/glpi/files/_log` sont vides dans le conteneur au moment de l'inspection ; la cause exacte n'est donc pas encore démontrée.
 - Conclusion provisoire : l'erreur LDAP ne peut pas être causée directement par `$manager->authenticate()`. Elle peut provenir d'une étape antérieure ou du rejeu de la page protégée. Il faut récupérer le texte exact de l'erreur et idéalement l'URL/étape visible au moment où elle apparaît avant une correction fonctionnelle.
-- Commits : `6216cec Document SSO reauthentication incident context` ajoute ce fichier. Le suivi de cette découverte doit être committé dans l'avancée courante.
+- Commits : `6216cec Document SSO reauthentication incident context` ajoute ce fichier ; `1d71060 Record GLPI reauthentication flow findings` ajoute les premières constatations du core GLPI.
+- Prochaine étape : exploiter le texte exact de l'erreur demandé à l'utilisateur pour identifier s'il s'agit du callback, du prompt ou du rejeu de la page.
