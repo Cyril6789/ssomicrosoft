@@ -17,6 +17,15 @@ Dernière mise à jour : 2026-10-16
 - Les 6 commits locaux couvrent l'adaptation GLPI 12, la réauthentification Entra pour les zones sensibles et plusieurs corrections du callback. Ils n'ont pas été poussés.
 - L'historique détaillé est consultable avec `git log --oneline origin/main..HEAD`.
 
+### Résumé des six commits fonctionnels antérieurs
+
+- `fad7f12` — compatibilité GLPI 12 : bootstrap des scripts legacy, typage PHP, adaptateur `Auth::login()` pour les identités Microsoft validées.
+- `076639d` — ajout d'une stratégie de réauthentification Entra et de son callback GLPI.
+- `ea58d90` — distinction/callback de réauthentification et rebond same-site pour le retour Microsoft.
+- `795ed8c` — conservation de l'action de vérification lors de l'envoi du formulaire POST GLPI.
+- `13bbc5c` — refus de choisir arbitrairement un tenant si plusieurs connexions SSO correspondent.
+- `413c759` — disponibilité de la stratégie Entra pour des utilisateurs adossés à LDAP et conservation de l'ID de connexion SSO après le login GLPI.
+
 ## Flux implémenté actuellement
 
 1. `PluginSsomicrosoftReAuth::getVerifyUrl()` envoie vers `front/sso.php?action=reauth_start`.
