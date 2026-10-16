@@ -60,9 +60,11 @@ retour Entra ID n’est nécessaire.
 
 Pour les utilisateurs connectés par SSO, une zone sensible de GLPI 12 peut exiger
 une nouvelle preuve d’identité. Le bouton de confirmation renvoie vers Entra ID et
-force une nouvelle saisie des identifiants (`prompt=login`) ; le plugin vérifie que
-le compte Microsoft correspond au même utilisateur GLPI avant de reprendre l’action.
-Le formulaire n’accepte pas le mot de passe Microsoft directement dans GLPI.
+demande de choisir un compte (`prompt=select_account`). Si une session Microsoft est
+déjà ouverte, Entra peut la réutiliser sans ressaisie des identifiants ; les règles
+Entra, notamment celles qui exigent un MFA, restent applicables. Le plugin vérifie
+que le compte Microsoft correspond au même utilisateur GLPI avant de reprendre
+l’action. Le formulaire n’accepte pas le mot de passe Microsoft directement dans GLPI.
 
 La connexion SSO passe désormais par `Auth::login()` de GLPI 12 : le MFA GLPI,
 le suivi/révocation des sessions et les nouveaux jetons « se souvenir de moi »

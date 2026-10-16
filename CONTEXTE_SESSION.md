@@ -114,3 +114,11 @@ Les fichiers principaux sont `inc/reauth.class.php`, `inc/sso.class.php`, `front
 - À la demande explicite de l'utilisateur, suppression sur `origin` de toutes les branches sauf `main` et `glpi12`.
 - Suppressions effectuées : `22-synchro-des-groupes-lors-de-la-synchro-entra-du-plugin`, `adn3w4-codex/trouver-plugin-glpi-manquant`, `claude/group-membership-diagnostics`, `claude/native-crontask`, `claude/plugin-update-resilient-install`, `claude/sso-login-redirect-accordion`, `claude/sync-upn-domain-filter`, `codex/créer-plugin-glpi--synchro-aad`, `codex/trouver-plugin-glpi-manquant`, `pj52kr-codex/trouver-plugin-glpi-manquant`.
 - Vérification après suppression : `origin` ne contient que `main` (`e329c5d`) et `glpi12` (`8475b9e`).
+
+### 2026-10-16 — réauthentification SSO rapide pour le sudo GLPI 12
+
+- L'utilisateur signale que l'authentification SSO initiale est rapide, mais que le sudo GLPI 12 relance une saisie complète des identifiants Microsoft et du MFA.
+- Cause identifiée dans `inc/sso.class.php` : le démarrage de réauthentification ajoutait `prompt=login`, qui force Entra à redemander les identifiants. Ce n'est pas imposé par GLPI.
+- Changement : remplacer `prompt=login` par `prompt=select_account`. Entra propose les comptes mémorisés et peut réutiliser la session existante. Les règles Entra, dont les exigences MFA, restent applicables.
+- Limite de sécurité : la session Microsoft existante peut suffire à confirmer l'action; cela ne garantit pas une nouvelle saisie d'identifiants ni un MFA à chaque sudo. Le plugin continue de vérifier que l'identité Microsoft correspond à l'utilisateur GLPI courant.
+- README ajusté pour documenter ce comportement. Aucun test lancé; essai navigateur à faire sur une zone sensible.

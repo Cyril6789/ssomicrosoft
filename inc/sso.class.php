@@ -79,7 +79,9 @@ class PluginSsomicrosoftSso {
          'response_mode' => 'query',
          'scope'         => self::SCOPES,
          'state'         => $state,
-         'prompt'        => 'login',
+         // Let Entra reuse the existing browser session while still asking
+         // which remembered account should confirm the sensitive action.
+         'prompt'        => 'select_account',
       ];
 
       return 'https://login.microsoftonline.com/' . rawurlencode($conn['tenant_id'])
