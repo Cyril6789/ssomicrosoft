@@ -45,6 +45,7 @@ class PluginSsomicrosoftSso {
    private const SESSION_REAUTH_CONN  = 'plugin_ssomicrosoft_reauth_conn';
    private const SESSION_REAUTH_USER  = 'plugin_ssomicrosoft_reauth_user';
    private const SESSION_REAUTH_TIME  = 'plugin_ssomicrosoft_reauth_time';
+   private const SESSION_REAUTH_COOKIE_SAMESITE = 'plugin_ssomicrosoft_reauth_cookie_samesite';
    private const REAUTH_STATE_PREFIX  = 'ssomicrosoft_reauth_';
 
    /** Start a fresh Entra authentication for the currently authenticated GLPI user. */
@@ -69,6 +70,7 @@ class PluginSsomicrosoftSso {
       $_SESSION[self::SESSION_REAUTH_CONN]  = (int) $conn['id'];
       $_SESSION[self::SESSION_REAUTH_USER]  = $users_id;
       $_SESSION[self::SESSION_REAUTH_TIME]  = time();
+      self::allowSessionCookieOnMicrosoftCallback();
 
       $params = [
          'client_id'     => $conn['client_id'],
@@ -87,6 +89,68 @@ class PluginSsomicrosoftSso {
    /** A state is pending only in the GLPI session that initiated the round trip. */
    public static function hasPendingReauthentication(): bool {
       return isset($_SESSION[self::SESSION_REAUTH_STATE]);
+   }
+
+   /**
+    * Temporarily use SameSite=Lax so the authenticated PHP session is sent on
+    * Entra's top-level GET callback. The original cookie policy is restored as
+    * soon as the browser returns to this site.
+    */
+   private static function allowSessionCookieOnMicrosoftCallback(): void {
+      if (session_status() !== PHP_SESSION_ACTIVE || session_id() === '') {
+         return;
+      }
+
+      $params = session_get_cookie_params();
+      $same_site = (string) ($params['samesite'] ?? '');
+      if (strtolower($same_site) !== 'strict') {
+         return;
+      }
+
+      $_SESSION[self::SESSION_REAUTH_COOKIE_SAMESITE] = $same_site;
+      $params['expires'] = time() + 600;
+      $params['samesite'] = 'Lax';
+      self::setSessionCookie($params);
+   }
+
+   /** Restore the session cookie policy saved before leaving for Entra ID. */
+   public static function restoreSessionCookieSameSite(): void {
+      if (session_status() !== PHP_SESSION_ACTIVE || session_id() === '') {
+         return;
+      }
+
+      $same_site = $_SESSION[self::SESSION_REAUTH_COOKIE_SAMESITE] ?? null;
+      if (!is_string($same_site) || $same_site === '') {
+         return;
+      }
+      unset($_SESSION[self::SESSION_REAUTH_COOKIE_SAMESITE]);
+
+      $params = session_get_cookie_params();
+      $lifetime = (int) ($params['lifetime'] ?? 0);
+      $params['expires'] = $lifetime > 0 ? time() + $lifetime : 0;
+      $params['samesite'] = $same_site;
+      self::setSessionCookie($params);
+   }
+
+   /** @param array<string, mixed> $params */
+   private static function setSessionCookie(array $params): void {
+      if (headers_sent()) {
+         return;
+      }
+
+      $options = [
+         'expires'  => (int) ($params['expires'] ?? 0),
+         'path'     => (string) ($params['path'] ?? '/'),
+         'domain'   => (string) ($params['domain'] ?? ''),
+         'secure'   => !empty($params['secure']),
+         'httponly' => !empty($params['httponly']),
+      ];
+      $same_site = (string) ($params['samesite'] ?? '');
+      if (in_array(strtolower($same_site), ['lax', 'strict', 'none'], true)) {
+         $options['samesite'] = $same_site;
+      }
+
+      setcookie(session_name(), session_id(), $options);
    }
 
    /** Identify a re-authentication callback without relying on session state. */

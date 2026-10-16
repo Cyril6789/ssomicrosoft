@@ -18,10 +18,11 @@ if ($action === 'reauth_start') {
     Html::redirect(PluginSsomicrosoftSso::startReauthentication(Session::getLoginUserID()));
 } elseif ((isset($_GET['code']) || isset($_GET['error']))
     && PluginSsomicrosoftSso::isReauthenticationCallback()) {
+    PluginSsomicrosoftSso::restoreSessionCookieSameSite();
+
     // If GLPI's session cookie is SameSite=Strict, browsers omit it on the
-    // first navigation back from Microsoft. Bounce through a same-site page
-    // before checking the session so the original authenticated session is
-    // sent on the resumed callback.
+    // first navigation back from Microsoft. The request can still be resumed
+    // safely through this same-site bounce before checking the session.
     if (!isset($_GET['_ssomicrosoft_resume'])) {
         $callback_params = [
             'state'              => (string) ($_GET['state'] ?? ''),

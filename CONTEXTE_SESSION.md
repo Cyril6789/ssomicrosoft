@@ -80,3 +80,10 @@ Les fichiers principaux sont `inc/reauth.class.php`, `inc/sso.class.php`, `front
 - Les traces sont cohérentes avec un accès LDAP tenté par la synchronisation de photo d'un utilisateur lié à LDAP, distinct du bind de vérification de mot de passe de la stratégie de réauthentification. À confirmer avant de modifier le code.
 - Hypothèse prioritaire à confirmer : l'état de réauthentification stocké dans `$_SESSION` n'est pas retrouvé au callback Microsoft (cookie/session PHP après navigation cross-site). Le bind LDAP de synchronisation de photo serait alors un effet secondaire du nouveau login SSO, et non la cause première du retour en échec.
 - Ne pas copier dans le journal les paramètres complets des URLs de callback : les journaux Apache contiennent des paramètres OAuth.
+
+### Correction proposée — session SameSite Strict
+
+- Valeurs PHP observées dans `glpi.secu.web` : `session.cookie_samesite=Strict`, `session.cookie_secure=0`, `session.cookie_path=/`.
+- Modification en cours : conserver le même cookie PHP de session, le passer temporairement à `SameSite=Lax` pour le GET de retour depuis Microsoft (expiration 10 minutes), puis rétablir son attribut SameSite d'origine au premier callback.
+- Cela doit laisser le callback utiliser la session GLPI déjà authentifiée, au lieu de relancer le login SSO et la synchronisation LDAP de photo.
+- Le code fonctionnel est modifié mais pas encore testé en bout en bout. Aucun test automatisé n'a été lancé.
