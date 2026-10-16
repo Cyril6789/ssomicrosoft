@@ -76,6 +76,7 @@ Les fichiers principaux sont `inc/reauth.class.php`, `inc/sso.class.php`, `front
 ### 2026-10-16 — inspection ciblée des logs Docker
 
 - Les logs Docker montrent un échec de bind LDAP (« Can't contact LDAP server ») dont la pile passe par `AuthLDAP::connectToServer()` puis `User::syncLdapPhoto()` (`User.php:1196`). La pile ne passe pas par `LdapReAuthStrategy::verify()`.
-- Les logs montrent aussi des retours SSO avec réponses HTTP 200/302 et un nouvel affichage de `/ReAuth/Prompt`; la cause de l'échec de réauthentification reste à déterminer à partir du message vu par l'utilisateur et de l'étape exacte.
+- La chronologie anonymisée montre `/ReAuth/Prompt` → POST de démarrage SSO → callback 200/302 → redirection vers le login → nouvel affichage de `/ReAuth/Prompt`. Cela suggère que le callback ne termine pas la réauthentification de la session attendue, puis qu'un login SSO normal est relancé.
 - Les traces sont cohérentes avec un accès LDAP tenté par la synchronisation de photo d'un utilisateur lié à LDAP, distinct du bind de vérification de mot de passe de la stratégie de réauthentification. À confirmer avant de modifier le code.
+- Hypothèse prioritaire à confirmer : l'état de réauthentification stocké dans `$_SESSION` n'est pas retrouvé au callback Microsoft (cookie/session PHP après navigation cross-site). Le bind LDAP de synchronisation de photo serait alors un effet secondaire du nouveau login SSO, et non la cause première du retour en échec.
 - Ne pas copier dans le journal les paramètres complets des URLs de callback : les journaux Apache contiennent des paramètres OAuth.
