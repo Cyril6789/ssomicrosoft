@@ -105,4 +105,5 @@ Les fichiers principaux sont `inc/reauth.class.php`, `inc/sso.class.php`, `front
 - La branche distante `glpi12` n'a donc pas été créée et aucun commit n'a été publié. La branche locale active est `glpi12`.
 - Nouvel essai à la demande de l'utilisateur : la clé SSH disponible est reconnue par GitHub, mais marquée en lecture seule (`The key you are authenticating with has been marked as read only`). Le push reste refusé et la branche distante n'est pas créée.
 - Deuxième nouvel essai à la demande de l'utilisateur : même refus GitHub, la clé SSH configurée reste en lecture seule ; aucun changement distant.
+- Nouvel essai après indication que l'accès devait être corrigé : même message GitHub (`The key you are authenticating with has been marked as read only`) ; aucun changement distant.
 - Suite : remplacer/configurer une clé SSH ou un jeton GitHub disposant des droits d'écriture sur `Cyril6789/ssomicrosoft`, puis relancer `git push -u origin glpi12`.
