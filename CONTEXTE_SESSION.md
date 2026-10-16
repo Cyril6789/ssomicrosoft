@@ -89,3 +89,10 @@ Les fichiers principaux sont `inc/reauth.class.php`, `inc/sso.class.php`, `front
 - Commit fonctionnel : `a7c88b3 Preserve GLPI session through Entra reauthentication`.
 - Le code est modifié mais pas encore testé en bout en bout. Aucun test automatisé n'a été lancé ; le résultat d'un nouvel essai navigateur reste à obtenir.
 - Dernier état observé après ce commit : branche `main`, arbre de travail propre, en avance de 13 commits sur `origin/main`; rien n'a été poussé.
+
+### 2026-10-16 — validation utilisateur et compatibilité GLPI 11
+
+- L'utilisateur confirme que le parcours de réauthentification Entra fonctionne après la correction `SameSite`.
+- Vérification de la compatibilité : la version déclarée du plugin est 3.1.0, avec `PLUGIN_SSOMICROSOFT_MIN_GLPI = 12.0.0`, `MAX_GLPI = 12.1.0` et PHP minimum 8.3.
+- Le parcours de réauthentification dépend de `Glpi\Security\ReAuth\ReAuthManager` et de `InPlaceReAuthStrategy`, APIs GLPI 12. L'adaptateur d'authentification a également été migré vers le workflow `Auth::login()` de GLPI 12.
+- Conclusion : cette version n'est pas rétrocompatible ni déclarée compatible avec GLPI 11. Rendre une seule version compatible avec GLPI 11 et 12 demanderait des chemins conditionnels/API adaptés et une validation séparée sur les deux versions ; ce travail n'a pas été entrepris.
