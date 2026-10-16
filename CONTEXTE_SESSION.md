@@ -63,3 +63,10 @@ Les fichiers principaux sont `inc/reauth.class.php`, `inc/sso.class.php`, `front
 - Conclusion provisoire : l'erreur LDAP ne peut pas être causée directement par `$manager->authenticate()`. Elle peut provenir d'une étape antérieure ou du rejeu de la page protégée. Il faut récupérer le texte exact de l'erreur et idéalement l'URL/étape visible au moment où elle apparaît avant une correction fonctionnelle.
 - Commits : `6216cec Document SSO reauthentication incident context` ajoute ce fichier ; `1d71060 Record GLPI reauthentication flow findings` ajoute les premières constatations du core GLPI.
 - Prochaine étape : exploiter le texte exact de l'erreur demandé à l'utilisateur pour identifier s'il s'agit du callback, du prompt ou du rejeu de la page.
+
+### 2026-10-16 — inspection ciblée des logs Docker
+
+- Les logs Docker montrent un échec de bind LDAP (« Can't contact LDAP server ») dont la pile passe par `AuthLDAP::connectToServer()` puis `User::syncLdapPhoto()` (`User.php:1196`). La pile ne passe pas par `LdapReAuthStrategy::verify()`.
+- Les logs montrent aussi des retours SSO avec réponses HTTP 200/302 et un nouvel affichage de `/ReAuth/Prompt`; la cause de l'échec de réauthentification reste à déterminer à partir du message vu par l'utilisateur et de l'étape exacte.
+- Les traces sont cohérentes avec un accès LDAP tenté par la synchronisation de photo d'un utilisateur lié à LDAP, distinct du bind de vérification de mot de passe de la stratégie de réauthentification. À confirmer avant de modifier le code.
+- Ne pas copier dans le journal les paramètres complets des URLs de callback : les journaux Apache contiennent des paramètres OAuth.
