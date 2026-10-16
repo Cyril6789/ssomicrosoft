@@ -103,4 +103,5 @@ Les fichiers principaux sont `inc/reauth.class.php`, `inc/sso.class.php`, `front
 - Création de la branche locale `glpi12` à partir de `65acafee9e462079c529c9f73739bf2f2d3d8d55` (état de `main`, 15 commits en avance sur `origin/main`).
 - Le push `git push -u origin glpi12` a échoué car Git ne dispose pas d'identifiants HTTPS interactifs (`could not read Username`). L'URL distante est `https://github.com/Cyril6789/ssomicrosoft.git`.
 - La branche distante `glpi12` n'a donc pas été créée et aucun commit n'a été publié. La branche locale active est `glpi12`.
-- Suite : réessayer le push dès que des identifiants GitHub sont configurés dans l'environnement.
+- Nouvel essai à la demande de l'utilisateur : la clé SSH disponible est reconnue par GitHub, mais marquée en lecture seule (`The key you are authenticating with has been marked as read only`). Le push reste refusé et la branche distante n'est pas créée.
+- Suite : remplacer/configurer une clé SSH ou un jeton GitHub disposant des droits d'écriture sur `Cyril6789/ssomicrosoft`, puis relancer `git push -u origin glpi12`.
