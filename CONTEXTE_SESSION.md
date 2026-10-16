@@ -50,3 +50,14 @@ Les fichiers principaux sont `inc/reauth.class.php`, `inc/sso.class.php`, `front
 - Lu les changements récents du flux : succès Microsoft conduit à `$manager->authenticate()` dans `front/sso.php`.
 - Pas encore modifié le code fonctionnel et pas encore identifié la cause exacte de l'erreur LDAP.
 - Prochaine étape : examiner les sources GLPI 12.0.0 disponibles sur ce serveur et la pile de l'erreur, puis suivre le chemin d'authentification du gestionnaire de réauthentification.
+
+### 2026-10-16 — examen du core GLPI
+
+- Le conteneur concerné est `glpi.secu.web`; GLPI est installé dans `/var/www/glpi`.
+- Dans GLPI 12.0.0, `ReAuthManager::authenticate()` ne déclenche aucune authentification : il écrit seulement `glpi_reauth_until` dans la session à partir de `glpi_currenttime`.
+- La stratégie LDAP native (`LdapReAuthStrategy`) exécute `Auth::connection_ldap()` dans sa méthode `verify()`. Le callback du plugin ne passe pas par cette méthode puisque son URL de vérification est son propre endpoint `front/sso.php?action=reauth_start`.
+- `ReAuthManager` sélectionne la stratégie disponible de priorité la plus haute. Le plugin est à 60, contre 50 pour la stratégie LDAP. Comme l'utilisateur est redirigé vers Microsoft, le plugin a bien été choisi au départ.
+- `Session::checkLoginUser()` ne fait que vérifier la validité de la session et `glpiname`; il n'effectue pas de bind LDAP.
+- Les logs GLPI listés sous `/var/www/glpi/files/_log` sont vides dans le conteneur au moment de l'inspection ; la cause exacte n'est donc pas encore démontrée.
+- Conclusion provisoire : l'erreur LDAP ne peut pas être causée directement par `$manager->authenticate()`. Elle peut provenir d'une étape antérieure ou du rejeu de la page protégée. Il faut récupérer le texte exact de l'erreur et idéalement l'URL/étape visible au moment où elle apparaît avant une correction fonctionnelle.
+- Commits : `6216cec Document SSO reauthentication incident context` ajoute ce fichier. Le suivi de cette découverte doit être committé dans l'avancée courante.
