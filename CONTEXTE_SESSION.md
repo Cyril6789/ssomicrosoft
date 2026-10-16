@@ -107,3 +107,10 @@ Les fichiers principaux sont `inc/reauth.class.php`, `inc/sso.class.php`, `front
 - Deuxième nouvel essai à la demande de l'utilisateur : même refus GitHub, la clé SSH configurée reste en lecture seule ; aucun changement distant.
 - Nouvel essai après indication que l'accès devait être corrigé : même message GitHub (`The key you are authenticating with has been marked as read only`) ; aucun changement distant.
 - Suite : remplacer/configurer une clé SSH ou un jeton GitHub disposant des droits d'écriture sur `Cyril6789/ssomicrosoft`, puis relancer `git push -u origin glpi12`.
+
+### 2026-10-16 — publication et nettoyage des branches distantes
+
+- L'utilisateur confirme avoir corrigé l'accès et poussé `glpi12`. La tentative suivante depuis cette session a encore rencontré la clé en lecture seule, mais la tête distante observée est bien `8475b9e`.
+- À la demande explicite de l'utilisateur, suppression sur `origin` de toutes les branches sauf `main` et `glpi12`.
+- Suppressions effectuées : `22-synchro-des-groupes-lors-de-la-synchro-entra-du-plugin`, `adn3w4-codex/trouver-plugin-glpi-manquant`, `claude/group-membership-diagnostics`, `claude/native-crontask`, `claude/plugin-update-resilient-install`, `claude/sso-login-redirect-accordion`, `claude/sync-upn-domain-filter`, `codex/créer-plugin-glpi--synchro-aad`, `codex/trouver-plugin-glpi-manquant`, `pj52kr-codex/trouver-plugin-glpi-manquant`.
+- Vérification après suppression : `origin` ne contient que `main` (`e329c5d`) et `glpi12` (`8475b9e`).
