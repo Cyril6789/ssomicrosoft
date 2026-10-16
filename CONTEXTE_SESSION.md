@@ -86,4 +86,6 @@ Les fichiers principaux sont `inc/reauth.class.php`, `inc/sso.class.php`, `front
 - Valeurs PHP observées dans `glpi.secu.web` : `session.cookie_samesite=Strict`, `session.cookie_secure=0`, `session.cookie_path=/`.
 - Modification en cours : conserver le même cookie PHP de session, le passer temporairement à `SameSite=Lax` pour le GET de retour depuis Microsoft (expiration 10 minutes), puis rétablir son attribut SameSite d'origine au premier callback.
 - Cela doit laisser le callback utiliser la session GLPI déjà authentifiée, au lieu de relancer le login SSO et la synchronisation LDAP de photo.
-- Le code fonctionnel est modifié mais pas encore testé en bout en bout. Aucun test automatisé n'a été lancé.
+- Commit fonctionnel : `a7c88b3 Preserve GLPI session through Entra reauthentication`.
+- Le code est modifié mais pas encore testé en bout en bout. Aucun test automatisé n'a été lancé ; le résultat d'un nouvel essai navigateur reste à obtenir.
+- Dernier état observé après ce commit : branche `main`, arbre de travail propre, en avance de 13 commits sur `origin/main`; rien n'a été poussé.
