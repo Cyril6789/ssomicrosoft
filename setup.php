@@ -1,6 +1,6 @@
 <?php
 
-define('PLUGIN_SSOMICROSOFT_VERSION', '3.1.0');
+define('PLUGIN_SSOMICROSOFT_VERSION', '3.2.0');
 
 // Minimal/maximal GLPI version, inclusive/exclusive
 define('PLUGIN_SSOMICROSOFT_MIN_GLPI', '12.0.0');
@@ -296,6 +296,21 @@ function plugin_ssomicrosoft_install() {
     // success branch). We therefore isolate these steps and log any problem to
     // files/_log/ssomicrosoft.log instead of letting it break the upgrade.
     try {
+        // RuleRight reads this table to populate the selectable LDAP criteria
+        // in the authorization-rule editor. The actual value is supplied by
+        // PluginSsomicrosoftGroup when the rules are evaluated for an SSO user.
+        if ($DB->tableExists('glpi_rulerightparameters')) {
+            $criterion_exists = countElementsInTable('glpi_rulerightparameters', [
+                'value' => 'ssomicrosoft_memberof',
+            ]) > 0;
+            if (!$criterion_exists) {
+                $DB->insert('glpi_rulerightparameters', [
+                    'value' => 'ssomicrosoft_memberof',
+                    'name'  => '(SSO) MemberOf',
+                ]);
+            }
+        }
+
         // Preserve granted permissions when upgrading from the former plugin key:
         // rename the old right rows to the new key. Drop any legacy row that
         // would collide with an already-migrated one first, so the rename can
@@ -380,6 +395,13 @@ function plugin_ssomicrosoft_install() {
 }
 
 /**
+ * Upgrade hook: GLPI calls this when the installed plugin version changes.
+ */
+function plugin_ssomicrosoft_update($old_version) {
+    return plugin_ssomicrosoft_install();
+}
+
+/**
  * Plugin uninstallation: drop tables and remove rights.
  */
 function plugin_ssomicrosoft_uninstall() {
@@ -392,6 +414,14 @@ function plugin_ssomicrosoft_uninstall() {
     // Remove the plugin's automatic action(s).
     $cron = new CronTask();
     $cron->deleteByCriteria(['itemtype' => 'PluginSsomicrosoftSync']);
+
+    // Keep the criterion if any authorization rule still uses it, so an
+    // uninstall cannot silently invalidate an administrator's rule setup.
+    if ($DB->tableExists('glpi_rulerightparameters')
+        && $DB->tableExists('glpi_rulecriterias')
+        && countElementsInTable('glpi_rulecriterias', ['criteria' => 'ssomicrosoft_memberof']) === 0) {
+        $DB->delete('glpi_rulerightparameters', ['value' => 'ssomicrosoft_memberof']);
+    }
 
     ProfileRight::deleteProfileRights(['plugin_ssomicrosoft']);
 

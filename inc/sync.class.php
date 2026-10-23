@@ -272,7 +272,7 @@ class PluginSsomicrosoftSync {
       // account is matched whatever attribute carries the domain — server-side
       // $filter on `mail`/UPN alone misses accounts whose domain is only an
       // alias/proxy address.
-      $select = 'id,displayName,mail,userPrincipalName,givenName,surname,'
+      $select = 'id,displayName,mail,userPrincipalName,givenName,surname,jobTitle,'
               . 'accountEnabled,otherMails,proxyAddresses';
       $url    = 'https://graph.microsoft.com/v1.0/users?$select=' . $select . '&$top=999';
 
@@ -316,7 +316,7 @@ class PluginSsomicrosoftSync {
     * @return array<int, array>|null Graph group objects, or null on failure.
     */
    private static function fetchUserGroups(string $token, string $entra_user_id): ?array {
-      $select = 'id,displayName,onPremisesDistinguishedName,onPremisesSamAccountName';
+      $select = 'id,displayName,onPremisesSamAccountName';
       $url    = 'https://graph.microsoft.com/v1.0/users/' . rawurlencode($entra_user_id)
               . '/transitiveMemberOf/microsoft.graph.group?$select=' . $select . '&$top=999';
 
@@ -351,7 +351,7 @@ class PluginSsomicrosoftSync {
          return null;
       }
 
-      $select = 'id,displayName,mail,userPrincipalName,givenName,surname,accountEnabled';
+      $select = 'id,displayName,mail,userPrincipalName,givenName,surname,jobTitle,accountEnabled';
       $filter = rawurlencode("mail eq '" . str_replace("'", "''", $email) . "'");
       $url    = 'https://graph.microsoft.com/v1.0/users?$filter=' . $filter . '&$select=' . $select;
 
@@ -448,7 +448,9 @@ class PluginSsomicrosoftSync {
          if (!empty($conn['delete_missing'])) {
             $user->delete(['id' => $user->getID()]);
          } elseif (!empty($conn['disable_if_disabled'])) {
-            $user->update(['id' => $user->getID(), 'is_active' => 0, '_no_history' => true]);
+            // Avoid User::update() here: it replays authorization rules and can
+            // try to bind to the user's LDAP source during an Entra sync.
+            $DB->update('glpi_users', ['is_active' => 0], ['id' => $user->getID()]);
          }
       }
    }

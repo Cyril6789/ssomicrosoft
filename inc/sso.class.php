@@ -199,11 +199,12 @@ class PluginSsomicrosoftSso {
 
       $identity = PluginSsomicrosoftUser::normalize($me);
       if (!self::matchesDomain($conn, $identity['email'])
+          && !self::matchesDomain($conn, $identity['upn'])
           && !self::matchesDomain($conn, $identity['login'])) {
          return false;
       }
 
-      $matched_user = PluginSsomicrosoftUser::find($identity['login'], $identity['email']);
+      $matched_user = PluginSsomicrosoftUser::find($identity['login'], $identity['email'], $identity['upn']);
       return $matched_user !== null
           && $matched_user->getID() === $users_id
           && !empty($matched_user->fields['is_active'])
@@ -361,7 +362,9 @@ class PluginSsomicrosoftSso {
       }
 
       $data = PluginSsomicrosoftUser::normalize($me);
-      if (!self::matchesDomain($conn, $data['email']) && !self::matchesDomain($conn, $data['login'])) {
+      if (!self::matchesDomain($conn, $data['email'])
+          && !self::matchesDomain($conn, $data['upn'])
+          && !self::matchesDomain($conn, $data['login'])) {
          self::fail(__('Ce compte ne correspond pas au domaine autorisé pour cette connexion.', 'ssomicrosoft'));
       }
 
@@ -451,7 +454,7 @@ class PluginSsomicrosoftSso {
 
    /** Fetch the signed-in user's profile from Microsoft Graph. */
    private static function fetchMe(string $access_token): ?array {
-      $url = 'https://graph.microsoft.com/v1.0/me?$select=id,displayName,mail,userPrincipalName,givenName,surname';
+      $url = 'https://graph.microsoft.com/v1.0/me?$select=id,displayName,mail,userPrincipalName,givenName,surname,jobTitle';
 
       $ch = curl_init($url);
       curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -487,7 +490,7 @@ class PluginSsomicrosoftSso {
     * @return array<int, array>|null Graph group objects, or null on failure.
     */
    private static function fetchMyGroups(string $access_token): ?array {
-      $select = 'id,displayName,onPremisesDistinguishedName,onPremisesSamAccountName';
+      $select = 'id,displayName,onPremisesSamAccountName';
       $url    = 'https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group'
               . '?$select=' . $select . '&$top=999';
 

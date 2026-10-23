@@ -17,17 +17,27 @@ class PluginSsomicrosoftUser {
     * Normalise a Microsoft Graph user object to the fields we care about.
     *
     * @param array $aad Raw Graph user object.
-    * @return array{login:string, email:string, firstname:string, realname:string, active:int}
+    * @return array{login:string, upn:string, email:string, firstname:string, realname:string, jobtitle:string, active:int}
     */
    public static function normalize(array $aad): array {
-      $login = $aad['userPrincipalName'] ?? ($aad['mail'] ?? '');
+      $upn = trim((string) ($aad['userPrincipalName'] ?? ''));
+      $login = $upn !== '' ? $upn : (string) ($aad['mail'] ?? '');
+      // GLPI login uses the UPN's local part (e.g. "pnom" from
+      // "pnom@example.com"). Keep the full UPN separately for matching
+      // accounts that were created before this mapping was used.
+      $separator = strpos($login, '@');
+      if ($separator !== false) {
+         $login = substr($login, 0, $separator);
+      }
       $email = $aad['mail'] ?? ($aad['userPrincipalName'] ?? '');
 
       return [
          'login'     => trim((string) $login),
+         'upn'       => $upn,
          'email'     => trim((string) $email),
          'firstname' => (string) ($aad['givenName'] ?? ''),
          'realname'  => (string) ($aad['surname'] ?? ''),
+         'jobtitle'  => trim((string) ($aad['jobTitle'] ?? '')),
          // accountEnabled is not always returned (e.g. delegated /me); default to active.
          'active'    => array_key_exists('accountEnabled', $aad)
                          ? (!empty($aad['accountEnabled']) ? 1 : 0)
@@ -36,30 +46,66 @@ class PluginSsomicrosoftUser {
    }
 
    /**
-    * Find an existing GLPI user matching the given login (UPN) or e-mail.
+    * Find an existing GLPI user matching the login, previous full UPN, or e-mail.
     */
-   public static function find(string $login, string $email): ?User {
-      $user = new User();
+   public static function find(string $login, string $email, string $upn = ''): ?User {
+      return self::resolveIdentity($login, $email, $upn)['user'];
+   }
 
-      if ($login !== '' && $user->getFromDBbyName($login)) {
-         return $user;
-      }
+   /**
+    * Resolve all available identifiers together, avoiding GLPI's
+    * getFromDBbyName() exception when a short login exists more than once.
+    *
+    * @return array{user:User|null, ambiguous:bool}
+    */
+   private static function resolveIdentity(string $login, string $email, string $upn): array {
+      global $DB;
 
+      $identifier_sets = [];
       if ($email !== '') {
-         global $DB;
-         $row = $DB->request([
+         $email_ids = [];
+         foreach ($DB->request([
             'SELECT' => 'users_id',
             'FROM'   => 'glpi_useremails',
             'WHERE'  => ['email' => $email],
-            'LIMIT'  => 1,
-         ])->current();
-
-         if ($row && $user->getFromDB((int) $row['users_id'])) {
-            return $user;
+         ]) as $row) {
+            $email_ids[] = (int) $row['users_id'];
          }
+         $identifier_sets[] = array_values(array_unique($email_ids));
       }
 
-      return null;
+      foreach (array_unique(array_filter([$upn, $login])) as $name) {
+         $name_ids = [];
+         foreach ($DB->request([
+            'SELECT' => 'id',
+            'FROM'   => 'glpi_users',
+            'WHERE'  => ['name' => $name],
+         ]) as $row) {
+            $name_ids[] = (int) $row['id'];
+         }
+         $identifier_sets[] = array_values(array_unique($name_ids));
+      }
+
+      // Ignore identifiers that do not match an existing account, then
+      // intersect the remaining results. Conflicting identities are unsafe.
+      $identifier_sets = array_values(array_filter($identifier_sets));
+      if (!$identifier_sets) {
+         return ['user' => null, 'ambiguous' => false];
+      }
+
+      $candidate_ids = array_shift($identifier_sets);
+      foreach ($identifier_sets as $ids) {
+         $candidate_ids = array_values(array_intersect($candidate_ids, $ids));
+      }
+      if (count($candidate_ids) !== 1) {
+         return ['user' => null, 'ambiguous' => true];
+      }
+
+      $user = new User();
+      if (!$user->getFromDB($candidate_ids[0])) {
+         return ['user' => null, 'ambiguous' => false];
+      }
+      return ['user' => $user, 'ambiguous' => false];
    }
 
    /**
@@ -77,9 +123,20 @@ class PluginSsomicrosoftUser {
          return null;
       }
 
-      $user = self::find($data['login'], $data['email']);
+      $identity = self::resolveIdentity($data['login'], $data['email'], $data['upn']);
+      $user = $identity['user'];
 
       if ($user === null) {
+         if ($identity['ambiguous']) {
+            Toolbox::logInFile(
+               'ssomicrosoft',
+               sprintf(
+                  "Synchronisation ignorée pour l'identité %s : plusieurs comptes GLPI correspondent aux identifiants reçus.\n",
+                  $data['login'] !== '' ? $data['login'] : $data['email']
+               )
+            );
+            return null;
+         }
          if (!$allow_create) {
             return null;
          }
@@ -92,6 +149,9 @@ class PluginSsomicrosoftUser {
             'authtype'  => Auth::EXTERNAL,
             '_no_history' => true,
          ];
+         if ($data['jobtitle'] !== '') {
+            $input['usertitles_id'] = Dropdown::importExternal('UserTitle', $data['jobtitle']);
+         }
          if ($data['email'] !== '') {
             $input['_useremails'] = [-1 => $data['email']];
          }
@@ -115,14 +175,23 @@ class PluginSsomicrosoftUser {
          return $user;
       }
 
-      // Existing user: refresh identity fields.
-      $user->update([
-         'id'        => $user->getID(),
+      // Existing user: refresh identity fields without invoking User::update().
+      // In GLPI 12 that method reprocesses authorization rules and can attempt
+      // an LDAP bind from the user's stored auths_id/user_dn, even though this
+      // update came from Microsoft SSO. The SSO flow applies the rules itself
+      // after synchronizing Entra groups in PluginSsomicrosoftGroup::apply().
+      global $DB;
+      $DB->update('glpi_users', [
          'realname'  => $data['realname'],
          'firstname' => $data['firstname'],
          'is_active' => $data['active'],
-         '_no_history' => true,
+         ...($data['jobtitle'] !== '' ? [
+            'usertitles_id' => Dropdown::importExternal('UserTitle', $data['jobtitle']),
+         ] : []),
+      ], [
+         'id' => $user->getID(),
       ]);
+      $user->getFromDB($user->getID());
 
       if ($data['email'] !== '') {
          self::ensureEmail($user->getID(), $data['email']);

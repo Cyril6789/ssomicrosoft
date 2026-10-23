@@ -2,7 +2,7 @@
 
 Plugin GLPI **« SSO Microsoft »** qui synchronise les utilisateurs depuis **Microsoft Entra ID** (ex‑Azure AD) et offre une **connexion SSO** (OpenID Connect / OAuth 2.0) aux utilisateurs GLPI.
 
-Version **3.1.0**, adaptée aux API de **GLPI 12.0.x** (GLPI ≥ 12.0.0 et < 12.1.0).
+Version **3.2.0**, adaptée aux API de **GLPI 12.0.x** (GLPI ≥ 12.0.0 et < 12.1.0).
 
 ## Fonctionnalités
 
@@ -10,7 +10,8 @@ Version **3.1.0**, adaptée aux API de **GLPI 12.0.x** (GLPI ≥ 12.0.0 et < 12.
 - **Synchronisation des comptes** depuis Entra ID (Microsoft Graph, flux *client credentials*) :
   - complète, par connexion, ou ciblée sur un utilisateur ;
   - **manuelle** (bouton dans GLPI) ou **automatique** via une action automatique GLPI ;
-  - rapprochement sur l'**UPN** (login) puis sur l'**e‑mail** (stocké dans `glpi_useremails`).
+  - login GLPI basé sur la partie avant `@` de l'**UPN** (ex. `pnom`), avec rapprochement
+    sur ce login, l'ancien UPN complet puis l'**e‑mail** (stocké dans `glpi_useremails`).
 - **Filtrage par domaine** : un ou plusieurs domaines (séparés par `,` ou `;`). Le filtre
   est appliqué sur **tous** les attributs porteurs du domaine : `mail`, `userPrincipalName`,
   `otherMails` et `proxyAddresses` (alias).
@@ -171,14 +172,26 @@ l'appartenance aux groupes de l'utilisateur dans Entra ID (`memberOf`, résolu d
 
 1. **rattacher l'utilisateur aux groupes GLPI** correspondants (liens *dynamiques*), via
    l'onglet **« Liaison annuaire LDAP »** de chaque groupe GLPI :
-   - **DN du groupe** (`ldap_group_dn`) : doit correspondre à l'identifiant du groupe Entra —
-     son `onPremisesDistinguishedName` pour les groupes synchronisés depuis l'AD, ou (à défaut
-     de DN, pour un groupe *cloud‑only*) son **nom d'affichage** ou son **object ID** ;
+   - **DN du groupe** (`ldap_group_dn`) : Entra fournit le **nom d'affichage** et, selon le
+     groupe, le `onPremisesSamAccountName`, mais pas le DN complet ni l'OU. Le plugin extrait
+     donc le `CN` du DN configuré dans GLPI et le compare au nom du groupe Entra ;
    - **Attribut … appartenance aux groupes** + **valeur** (`ldap_field` + `ldap_value`) : la
      valeur (motif *LIKE*, `*`/`%` acceptés) est comparée aux identifiants des groupes Entra.
 2. **alimenter les « Règles d'affectation d'habilitations à un utilisateur »** (moteur
    `RuleRight`) avec les groupes GLPI ainsi obtenus : attribution automatique des **profils** et
    **entités** selon les groupes, exactement comme en LDAP.
+
+### Critère de règle propre au SSO
+
+Après la mise à jour du plugin, l'éditeur des règles d'affectation d'habilitations propose le
+critère **« (SSO) MemberOf »**. Utilisez **(SSO) MemberOf → est** et indiquez le nom d'affichage
+du groupe tel qu'il apparaît dans Entra. Le critère compare aussi le
+`onPremisesSamAccountName` lorsqu'il est renvoyé par Entra. Il permet d'écrire des règles sur
+les noms des groupes sans dépendre de leur DN ou de leur OU dans Active Directory.
+
+Les anciens critères LDAP **MemberOf** restent utilisables pour les groupes GLPI rapprochés :
+le plugin réutilise le DN enregistré dans leur liaison LDAP. Le nouveau critère SSO, lui, est
+évalué directement à partir des noms de groupes Entra reçus.
 
 > **Opt‑in & sans création de groupe.** Aucun groupe GLPI n'est créé : seuls les groupes
 > portant déjà une *Liaison annuaire LDAP* sont rapprochés. Tant qu'aucun groupe n'en porte,

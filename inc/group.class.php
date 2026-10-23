@@ -46,8 +46,7 @@ class PluginSsomicrosoftGroup {
     *
     * @param int   $users_id    GLPI user id (already provisioned).
     * @param array $entraGroups List of Graph group objects, each typically with
-    *                           id, displayName, onPremisesDistinguishedName and
-    *                           onPremisesSamAccountName.
+    *                           id, displayName and onPremisesSamAccountName.
     */
    public static function apply(int $users_id, array $entraGroups): void {
       if ($users_id <= 0) {
@@ -62,6 +61,13 @@ class PluginSsomicrosoftGroup {
       // 1. Resolve the GLPI groups the user should belong to, from the linkage
       //    configured on each group (DN match or field/value match).
       $group_ids = self::matchGlpiGroupIds($entraGroups);
+      // Graph exposes group names and sAMAccountName, but not the full AD DN.
+      // Reuse the configured LDAP DN on each matched GLPI group for legacy
+      // RuleRight MemberOf criteria.
+      $memberof_dns = self::mappedGroupDns($group_ids);
+      // New SSO criterion: expose Entra group names directly, without needing
+      // the on-premises OU/DN that Microsoft Graph does not return.
+      $sso_group_names = self::entraGroupNames($entraGroups);
 
       // Diagnostic line: tells whether groups were received from Graph at all
       // (0 received => GroupMember.Read.All probably missing / not consented)
@@ -77,39 +83,117 @@ class PluginSsomicrosoftGroup {
          $group_ids ? ' (groups_id: ' . implode(', ', $group_ids) . ')' : ''
       ));
 
-      // 2. Run the authorization rules ("Règles d'affectation d'habilitations")
-      //    with those group ids, exactly like User::getFromLDAP() does. Groups
-      //    assigned by a rule are returned in _ldap_rules['groups_id'] and must
-      //    be preserved by the Group_User sync below.
-      $rules  = new RuleRightCollection();
-      $result = $rules->processAllRules($group_ids, $user->fields, [
+      // 2. Preview the rules with the Entra-mapped groups so rule-assigned group
+      //    links are preserved while stale Entra memberships are removed.
+      $preview_rules = self::newRuleCollection($memberof_dns, $sso_group_names);
+      $result = $preview_rules->processAllRules($group_ids, $user->fields, [
+         'type'  => $user->fields['authtype'],
+         'login' => $user->fields['name'],
+         'email' => UserEmail::getDefaultForUser($users_id),
+      ]);
+      $rule_groups = (array) ($result['_ldap_rules']['groups_id'] ?? []);
+
+      self::syncGroupLinks($users_id, $group_ids, $rule_groups, self::managedGroupIds());
+
+      // 3. Re-run the rules against the persisted GLPI memberships, then use
+      //    GLPI's normal apply methods without re-opening the user's LDAP
+      //    connection. SSO group rules do not require an LDAP bind.
+      $groups = Group_User::getUserGroups($users_id);
+      $groups_id = array_column($groups, 'id');
+      $rules = self::newRuleCollection($memberof_dns, $sso_group_names);
+      $result = $rules->processAllRules($groups_id, $user->fields, [
          'type'  => $user->fields['authtype'],
          'login' => $user->fields['name'],
          'email' => UserEmail::getDefaultForUser($users_id),
       ]);
 
-      $rule_groups = (array) ($result['_ldap_rules']['groups_id'] ?? []);
-
-      // 3. Reflect the membership into dynamic Group_User links, only touching
-      //    the groups this plugin manages so an SSO login never wipes the rest.
-      self::syncGroupLinks($users_id, $group_ids, $rule_groups, self::managedGroupIds());
-
-      // 4. Persist the habilitations (dynamic Profile_User entries) computed by
-      //    the rule engine.
       $user->input = $result;
       $user->willProcessRuleRight();
+      $user->applyGroupsRules();
       $user->applyRightRules();
+
+      self::log(sprintf(
+         'Règles pour %s (user #%d) : groupes transmis [%s], %d DN MemberOf issus des liaisons GLPI ; résultat _ldap_rules=%s ; profils GLPI après application [%s].',
+         (string) ($user->fields['name'] ?? '?'),
+         $users_id,
+         implode(', ', array_map('intval', $groups_id)),
+         count($memberof_dns),
+         json_encode($result['_ldap_rules'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+         implode(', ', array_map('intval', Profile_User::getUserProfiles($users_id)))
+      ));
+   }
+
+   /**
+    * Build a RuleRightCollection that exposes known AD group DNs as the LDAP
+    * `memberof` attribute. This lets existing LDAP MemberOf criteria continue
+    * to work during SSO without opening an LDAP connection.
+    */
+   private static function newRuleCollection(array $memberof, array $ssoGroupNames): RuleRightCollection {
+      $rules = new class extends RuleRightCollection {
+         /** @var string[] */
+         public array $memberOfDns = [];
+         /** @var string[] */
+         public array $ssoGroupNames = [];
+
+         public function prepareInputDataForProcess($input, $params) {
+            $prepared = parent::prepareInputDataForProcess($input, $params);
+            if (is_array($prepared)) {
+               $prepared['memberof'] = $this->memberOfDns;
+               $prepared['memberOf'] = $this->memberOfDns;
+               $prepared['ssomicrosoft_memberof'] = $this->ssoGroupNames;
+            }
+            return $prepared;
+         }
+      };
+
+      $rules->memberOfDns = $memberof;
+      $rules->ssoGroupNames = $ssoGroupNames;
+      return $rules;
+   }
+
+   /** @return string[] Unique Entra group display names and legacy short names. */
+   private static function entraGroupNames(array $entraGroups): array {
+      $names = [];
+      foreach ($entraGroups as $group) {
+         foreach (['displayName', 'onPremisesSamAccountName'] as $key) {
+            $name = trim((string) ($group[$key] ?? ''));
+            if ($name !== '') {
+               $names[] = $name;
+            }
+         }
+      }
+      return array_values(array_unique($names));
+   }
+
+   /** @return string[] Full LDAP DNs configured on matched GLPI groups. */
+   private static function mappedGroupDns(array $group_ids): array {
+      if (!$group_ids) {
+         return [];
+      }
+
+      global $DB;
+      $dns = [];
+      foreach ($DB->request([
+         'SELECT' => 'ldap_group_dn',
+         'FROM'   => 'glpi_groups',
+         'WHERE'  => ['id' => array_map('intval', $group_ids)],
+      ]) as $group) {
+         $dn = trim((string) ($group['ldap_group_dn'] ?? ''));
+         if ($dn !== '') {
+            $dns[] = $dn;
+         }
+      }
+      return array_values(array_unique($dns));
    }
 
    /**
     * Map the user's Entra groups to GLPI group ids using each group's LDAP
     * linkage, the same way User::getFromLDAPGroupVirtual() does for LDAP:
-    *   - ldap_group_dn : matched against the Entra group's full DN
-    *     (onPremisesDistinguishedName, for AD-synced groups) AND against the CN
-    *     extracted from the configured DN, compared to the group's displayName /
-    *     sAMAccountName. This is the key to parity: Entra usually exposes only
-    *     the group *name* (not the on-prem DN), so a GLPI group still configured
-    *     with the full AD DN "CN=NAME,OU=...,DC=..." matches on its CN "NAME";
+    *   - ldap_group_dn : matched against the CN extracted from the configured
+    *     DN and compared to the Entra group's displayName / sAMAccountName.
+    *     Entra exposes the group name rather than its full on-premises DN, so a
+    *     GLPI group configured with "CN=NAME,OU=...,DC=..." matches on "NAME".
+    *     The configured full DN is reused for legacy MemberOf rules;
     *   - ldap_field + ldap_value : ldap_value is matched (SQL LIKE semantics)
     *     against the user's group identifiers, ldap_field being the membership
     *     attribute (e.g. "memberof").
@@ -123,7 +207,7 @@ class PluginSsomicrosoftGroup {
       // Flatten every identifier an Entra group can be recognised by.
       $identifiers = [];
       foreach ($entraGroups as $g) {
-         foreach (['onPremisesDistinguishedName', 'displayName', 'onPremisesSamAccountName', 'id'] as $key) {
+         foreach (['displayName', 'onPremisesSamAccountName', 'id'] as $key) {
             $val = trim((string) ($g[$key] ?? ''));
             if ($val !== '') {
                $identifiers[] = $val;
@@ -286,8 +370,7 @@ class PluginSsomicrosoftGroup {
 
    /**
     * Build a short, readable summary of the Entra groups for the diagnostic
-    * log: the DN when present (what "DN du groupe" must match for AD-synced
-    * groups), otherwise the display name. Capped so the log stays compact.
+   * log: the display name, capped so the log stays compact.
     */
    private static function describeEntraGroups(array $entraGroups): string {
       if (empty($entraGroups)) {
@@ -296,8 +379,7 @@ class PluginSsomicrosoftGroup {
 
       $labels = [];
       foreach ($entraGroups as $g) {
-         $labels[] = trim((string) ($g['onPremisesDistinguishedName'] ?? ''))
-                  ?: trim((string) ($g['displayName'] ?? ''))
+         $labels[] = trim((string) ($g['displayName'] ?? ''))
                   ?: trim((string) ($g['id'] ?? '?'));
       }
 
